@@ -166,6 +166,18 @@ describe('escritas passam apenas por RPC (nunca INSERT/UPDATE/DELETE direto)', (
     });
   });
 
+  it('"proibido" avisa o app para revalidar a sessão; erros de validação não', async () => {
+    const onForbidden = vi.fn();
+    const denied = fake({ rpc: () => err({ code: 'PT403', message: 'Você não tem permissão.' }) });
+    await expect(createSupabaseServices(denied.client, { onForbidden }).team.setMemberActive(actor, 'm1', false)).rejects.toMatchObject({ code: 'forbidden' });
+    const rls = fake({ rpc: () => err({ code: '42501', message: 'permission denied' }) });
+    await expect(createSupabaseServices(rls.client, { onForbidden }).team.setMemberActive(actor, 'm1', false)).rejects.toMatchObject({ code: 'forbidden' });
+    expect(onForbidden).toHaveBeenCalledTimes(2);
+    const invalid = fake({ rpc: () => err({ code: 'PT422', message: 'x', hint: 'name' }) });
+    await expect(createSupabaseServices(invalid.client, { onForbidden }).team.setMemberActive(actor, 'm1', false)).rejects.toMatchObject({ code: 'validation' });
+    expect(onForbidden).toHaveBeenCalledTimes(2);
+  });
+
   it('JWT expirado em qualquer chamada encerra a sessão local (uma vez) e vira "unauthorized"', async () => {
     const onUnauthorized = vi.fn();
     const f = fake({ rpc: () => err({ code: 'PGRST301', message: 'JWT expired' }, 401) });

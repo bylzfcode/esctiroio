@@ -28,6 +28,11 @@ import {
 export interface LiveOptions {
   /** Chamado quando o servidor recusa o JWT (expirado/revogado). */
   onUnauthorized?: () => void;
+  /**
+   * Chamado quando o servidor responde "proibido". Pode indicar que as permissões da pessoa mudaram
+   * (vínculo desativado) e que a interface está desatualizada: o app revalida a sessão.
+   */
+  onForbidden?: () => void;
 }
 
 export function createSupabaseServices(client: SupabaseClient, options: LiveOptions = {}): Services {
@@ -44,6 +49,7 @@ export function createSupabaseServices(client: SupabaseClient, options: LiveOpti
   }
   function notify(err: ServiceError): ServiceError {
     if (err.code === 'unauthorized') options.onUnauthorized?.();
+    else if (err.code === 'forbidden') options.onForbidden?.();
     return err;
   }
   const mapThrown = (e: unknown) => notify(mapRemoteError({ message: e instanceof Error ? e.message : String(e) }));

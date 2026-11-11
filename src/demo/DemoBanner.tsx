@@ -1,5 +1,5 @@
 import { FlaskConical } from 'lucide-react';
-import { Button } from '../ui/Button';
+import { Button } from '@/components/ui/Button';
 
 /** Faixa permanente: deixa claro que é demonstração e que a troca de perfil não é login. */
 export function DemoBanner({ onSwitchProfile }: { onSwitchProfile: () => void }) {

@@ -45,6 +45,11 @@ const deps: InviteDeps = {
     if (error) throw rpcFailure(error);
   },
 
+  async reserveSlot(token) {
+    const { error } = await asCaller(token).rpc('reserve_invite_slot');
+    if (error) throw rpcFailure(error);
+  },
+
   async findAccount(email) {
     const { data, error } = await admin.from('profiles').select('id, activated_at').eq('email', email).maybeSingle();
     if (error) throw new Error(error.message);

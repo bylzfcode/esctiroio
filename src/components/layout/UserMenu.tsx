@@ -3,14 +3,13 @@ import { useCallback, useRef, useState } from 'react';
 import { ROLE_LABEL } from '@/domain/modules';
 import { useAuth } from '@/context/AuthContext';
 import { useSession } from '@/context/SessionContext';
-import { services } from '@/services';
 import { Avatar } from '../ui/Avatar';
 import { PopoverPanel, usePopoverDismiss } from '../ui/Popover';
 
 export function UserMenu({ onSwitchProfile }: { onSwitchProfile: () => void }) {
   const { person, access, activeStore } = useSession();
   const auth = useAuth();
-  const demo = !!services.demo;
+  const demo = __DEMO_BUILD__;
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);

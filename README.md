@@ -71,19 +71,24 @@ Cada arquivo de teste cria e remove o seu próprio banco temporário.
 
 ## Verificações
 
+Validadas contra uma **pilha Supabase local real** (Supabase CLI + Docker: PostgreSQL 17, Auth/GoTrue, PostgREST,
+Edge Functions e Mailpit para capturar e-mails). Nada foi aplicado em projeto remoto.
+
 | | Resultado |
 | --- | --- |
-| Tipos (`tsc -b`) | app, ferramentas e testes/servidor sem erros |
-| Build (`npm run build`, `build:demo`) | ok |
-| `npm test` (PGlite) | 142 passam, 7 pulados* |
-| `TEST_DATABASE_URL=… npm test` (PostgreSQL 16 real) | 143 passam, 6 pulados* |
-| Roteiros de navegador (Playwright) | modo demonstração 46/46; interface do modo real 29/29 (contra servidor **falso**) |
+| Tipos (`tsc -b`) e builds (`build`, `build:demo`) | sem erros |
+| `npm test` (PGlite) | 148 passam, 26 pulados* |
+| `TEST_DATABASE_URL=… npm test` (PostgreSQL 16 real, com concorrência) | 150 passam, 24 pulados* |
+| `tests/live`: Auth + PostgREST + Edge Function reais, identidades reais | 24/24 (repetido a partir de banco zerado) |
+| Interface (build de produção) × pilha real, sem servidor falso | 31/31 |
+| Regressão do modo demonstração (Playwright) | 46/46 |
+| Build de produção | sem arquivos, textos ou dados de demonstração; sem chave privilegiada |
 
-\* Pulados: 6 testes de integração (`tests/live`) que exigem a pilha Supabase em execução e, no PGlite, o teste de concorrência.
+\* Pulados: `tests/live` (24, exigem a pilha em execução) e a concorrência (2, exigem Postgres real).
 
-**Não executado aqui (depende de configuração externa):** Auth real (GoTrue) e envio de e-mails, PostgREST real,
-Edge Function no runtime Deno, `supabase/config.toml` com a CLI e o painel hospedado. A lista completa, com
-como verificar cada item, está em [`docs/BACKEND.md`](docs/BACKEND.md#o-que-foi-verificado-e-o-que-não-foi).
+**Ainda não verificado (depende de ambiente externo):** entrega por SMTP hospedado, ajustes do painel do projeto
+hospedado, `supabase db push` e deploy da função em projeto remoto. Os fluxos, os defeitos encontrados na validação e
+como reproduzir tudo estão em [`docs/BACKEND.md`](docs/BACKEND.md#o-que-foi-verificado-e-o-que-não-foi).
 
 ## Modo demonstração
 
@@ -106,6 +111,7 @@ Nada disso é autenticação, e as verificações do modo demonstração rodam n
 ```
 src/
   config/      escolha explícita do modo e validação do ambiente (rejeita chave privilegiada)
+  demo/        interface exclusiva da demonstração (só existe no build --mode demo)
   domain/      tipos e regras de acesso/permissões (puras)
   services/    contratos (types.ts) + supabase/ (real) + mock/ (demonstração)
   context/     tema, avisos, autenticação e sessão
@@ -116,7 +122,7 @@ supabase/
   functions/   Edge Function de convite (única que usa a chave de serviço)
   seed.sql     lojas fictícias SÓ para desenvolvimento local
 tests/         db/ (SQL/RLS), live/ (pilha real, opcional), static/ (segredos)
-e2e/           roteiros Playwright opcionais (demo e interface do modo real)
+e2e/           roteiros Playwright opcionais (demo, interface do modo real e interface × pilha real)
 docs/BACKEND.md
 ```
 
@@ -125,6 +131,6 @@ docs/BACKEND.md
 - Financeiro, calendário e exportação (as permissões existem; não há ações).
 - Telas para criar/editar lojas, reenviar convites e exportar auditoria.
 - MFA e política de cabeçalhos HTTP (CSP) no repositório (dependem do host).
-- Execução automatizada em CI e a validação contra o Supabase em execução (veja `docs/BACKEND.md`).
+- Execução automatizada em CI e a validação do projeto **hospedado** (veja `docs/BACKEND.md`).
 
 Fora de escopo e não implementado: catálogo comercial, vitrine, pedidos e automação de vendas.

@@ -6,6 +6,7 @@
 //   2. valida a entrada (nome é SEMPRE exigido, para não revelar se o e-mail já tem conta);
 //   3. PRÉ-CHECA a autorização com a identidade do chamador (RPC precheck_member_invite):
 //      quem não tem permissão nunca dispara convite nem consulta de e-mail;
+//      e RESERVA uma vaga do limite por hora (RPC reserve_invite_slot, atômica) antes de qualquer envio;
 //   4. reaproveita a conta existente ou convida uma nova e a ativa (activate_profile);
 //   5. cria SOMENTE o vínculo, com a identidade do chamador (RPC create_membership), que
 //      reaplica todas as regras no banco (defesa em profundidade).
@@ -50,6 +51,8 @@ export interface InviteDeps {
   verifyCaller(accessToken: string): Promise<string | null>;
   /** RPC com a identidade do chamador. Lança RpcFailure. */
   precheck(accessToken: string, args: { storeId: string; email: string; role: string; permissions: unknown }): Promise<void>;
+  /** RPC com a identidade do chamador: reserva atomicamente uma vaga do limite por hora. Lança RpcFailure. */
+  reserveSlot(accessToken: string): Promise<void>;
   /** Consulta com chave privilegiada. */
   findAccount(email: string): Promise<AccountRef | null>;
   /** Cria o usuário no Auth e envia o convite. Devolve o id do novo usuário. */
@@ -138,6 +141,14 @@ export async function handleInvite(authorization: string | null, rawBody: unknow
   // (3) Autorização ANTES de qualquer efeito colateral ou consulta de contas.
   try {
     await deps.precheck(token, { storeId: input.storeId, email: input.email, role: input.role, permissions: input.permissions });
+  } catch (e) {
+    return fromRpc(e);
+  }
+
+  // (3b) Reserva uma vaga do limite por hora ANTES de consultar contas ou enviar e-mail. A reserva é
+  // atômica no banco, então chamadas simultâneas não ultrapassam o limite.
+  try {
+    await deps.reserveSlot(token);
   } catch (e) {
     return fromRpc(e);
   }

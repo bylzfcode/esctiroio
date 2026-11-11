@@ -1,6 +1,9 @@
 import { setServices } from '@/services';
 import { resolveConfig, type RawEnv } from './env';
 
+/** Evento para a sessão revalidar permissões no servidor (ouvido por SessionContext). */
+export const REVALIDATE_EVENT = 'esctiroio:revalidar-sessao';
+
 export type Runtime = { kind: 'ready'; mode: 'demo' | 'live' } | { kind: 'invalid'; problems: string[] };
 
 /**
@@ -38,6 +41,8 @@ export async function initRuntime(env: RawEnv = import.meta.env as unknown as Ra
         // Sessão expirada/revogada detectada em qualquer chamada: encerra localmente.
         // O evento SIGNED_OUT (não iniciado pelo usuário) leva à tela de entrada com aviso.
         onUnauthorized: () => void client.auth.signOut({ scope: 'local' }),
+        // "Proibido" pode significar permissões alteradas: a sessão revalida (só atualiza se algo mudou).
+        onForbidden: () => window.dispatchEvent(new Event(REVALIDATE_EVENT)),
       }),
     );
     return { kind: 'ready', mode: 'live' };

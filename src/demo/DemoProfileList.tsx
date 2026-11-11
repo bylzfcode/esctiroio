@@ -2,11 +2,11 @@ import { Check } from 'lucide-react';
 import { useAsync } from '@/hooks/useAsync';
 import { services } from '@/services';
 import type { DemoProfile } from '@/services/types';
-import { Avatar } from '../ui/Avatar';
-import { Badge } from '../ui/Badge';
-import { Notice } from '../ui/StateViews';
-import { ErrorState } from '../ui/StateViews';
-import { ListSkeleton } from '../ui/Skeleton';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Notice } from '@/components/ui/StateViews';
+import { ErrorState } from '@/components/ui/StateViews';
+import { ListSkeleton } from '@/components/ui/Skeleton';
 
 const GROUPS: { kind: DemoProfile['kind']; title: string }[] = [
   { kind: 'admin', title: 'Administrador geral' },

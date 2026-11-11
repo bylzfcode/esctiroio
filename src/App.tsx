@@ -15,12 +15,12 @@ import LoginPage from '@/pages/LoginPage';
 import SetPasswordPage from '@/pages/SetPasswordPage';
 import ActivityPage from '@/pages/ActivityPage';
 import CalendarPage from '@/pages/CalendarPage';
-import DemoEntryPage from '@/pages/DemoEntryPage';
+import { DemoEntryPage } from '@/demo/lazy';
 import FinancePage from '@/pages/FinancePage';
 import OverviewPage from '@/pages/OverviewPage';
 import SettingsPage from '@/pages/SettingsPage';
 import TeamPage from '@/pages/TeamPage';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 
 export default function App() {
   const { status, error, retry, leaveDemo, stores, person, access } = useSession();
@@ -43,7 +43,15 @@ export default function App() {
     if (auth.status === 'needs_password') return <SetPasswordPage />;
   }
 
-  if (status === 'sem_perfil') return live ? loading : <DemoEntryPage />;
+  if (status === 'sem_perfil') {
+    return __DEMO_BUILD__ ? (
+      <Suspense fallback={loading}>
+        <DemoEntryPage />
+      </Suspense>
+    ) : (
+      loading
+    );
+  }
 
   if (status === 'carregando' || (status === 'pronta' && !person)) return loading;
 

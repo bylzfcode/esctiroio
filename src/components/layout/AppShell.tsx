@@ -1,9 +1,7 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { Suspense, useCallback, useState, type ReactNode } from 'react';
 import { readString, writeString } from '@/lib/storage';
 import { useSession } from '@/context/SessionContext';
-import { services } from '@/services';
-import { DemoBanner } from './DemoBanner';
-import { DemoProfileModal } from './DemoProfileModal';
+import { DemoBanner, DemoProfileModal } from '@/demo/lazy';
 import { Header } from './Header';
 import { DesktopSidebar, MobileDrawer } from './Sidebar';
 
@@ -11,7 +9,7 @@ const KEY = 'esctiroio.menu.expandido';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { person, scope, selectProfile } = useSession();
-  const demo = !!services.demo; // faixa e seletor de perfis existem SOMENTE no modo demonstração
+  const demo = __DEMO_BUILD__; // faixa e seletor de perfis existem SOMENTE no build de demonstração
   const [expanded, setExpanded] = useState(() => readString(KEY) === '1');
   const [drawer, setDrawer] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
@@ -39,21 +37,27 @@ export function AppShell({ children }: { children: ReactNode }) {
       <MobileDrawer open={drawer} onClose={closeDrawer} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header onOpenMenu={() => setDrawer(true)} onSwitchProfile={() => setProfileModal(true)} />
-        {demo && <DemoBanner onSwitchProfile={() => setProfileModal(true)} />}
+        {demo && (
+          <Suspense fallback={null}>
+            <DemoBanner onSwitchProfile={() => setProfileModal(true)} />
+          </Suspense>
+        )}
         <main id="conteudo" key={contextKey} tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 focus:outline-none sm:px-6 sm:py-8">
           {children}
         </main>
       </div>
       {demo && (
-        <DemoProfileModal
-          open={profileModal}
-          currentId={person?.id ?? null}
-          onClose={() => setProfileModal(false)}
-          onSelect={(id) => {
-            setProfileModal(false);
-            selectProfile(id);
-          }}
-        />
+        <Suspense fallback={null}>
+          <DemoProfileModal
+            open={profileModal}
+            currentId={person?.id ?? null}
+            onClose={() => setProfileModal(false)}
+            onSelect={(id) => {
+              setProfileModal(false);
+              selectProfile(id);
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

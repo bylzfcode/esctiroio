@@ -1,5 +1,5 @@
 import { APP_NAME } from '@/app/navigation';
-import { DemoProfileList } from '@/components/layout/DemoProfileList';
+import { DemoProfileList } from './DemoProfileList';
 import { useSession } from '@/context/SessionContext';
 
 /** Tela inicial: ainda não existe login. A pessoa escolhe um perfil fictício. */

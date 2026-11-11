@@ -410,24 +410,39 @@ describe('contas, convites e identidade', () => {
   });
 });
 
-describe('freio contra abuso de convites', () => {
-  it('responsável tem limite de 30 cadastros por hora; administrador geral não é limitado', async () => {
-    const made: string[] = [];
-    for (let i = 0; i < 31; i++) {
-      const id = `00000000-0000-4000-8000-${String(900 + i).padStart(12, '0')}`;
-      await who.owner().q('insert into auth.users (id, email) values ($1, $2)', [id, `massa${i}@demo.example`]);
-      await who.owner().q('update public.profiles set active = true, activated_at = now() where id = $1', [id]);
-      made.push(id);
-    }
+describe('limite de convites por hora (reserva atômica antes do envio)', () => {
+  it('cada responsável tem 30 vagas por hora; administrador geral não é limitado', async () => {
     const bruno = who.u('bruno');
-    for (const id of made.slice(0, 30)) await bruno.rpc('create_membership', S.alfa, id, 'funcionario', '', CALENDAR_ONLY);
-    const blocked = await bruno.rpcErr('create_membership', S.alfa, made[30]!, 'funcionario', '', CALENDAR_ONLY);
-    expect(blocked).toMatchObject({ code: 'PT429', message: expect.stringMatching(/Limite de cadastros/) });
-    // O pré-check também barra: nenhum convite é disparado depois do limite
-    expect((await bruno.rpcErr('precheck_member_invite', S.alfa, 'novo@demo.example', 'funcionario', CALENDAR_ONLY)).code).toBe('PT429');
-    // Outra pessoa e o administrador geral seguem livres
-    expect((await who.u('helena').rpc('create_membership', S.alfa, made[30]!, 'funcionario', '', CALENDAR_ONLY))[0]!.r).toBeTruthy();
-    expect((await who.u('ana').rpc('create_membership', S.beta, made[0]!, 'funcionario', '', CALENDAR_ONLY))[0]!.r).toBeTruthy();
+    for (let i = 0; i < 30; i++) await bruno.rpc('reserve_invite_slot');
+    expect(await bruno.rpcErr('reserve_invite_slot')).toMatchObject({ code: 'PT429', message: expect.stringMatching(/Limite de convites/) });
+    // O limite é por pessoa
+    await who.u('helena').rpc('reserve_invite_slot');
+    // Administrador geral não é limitado (e não grava tentativas)
+    for (let i = 0; i < 35; i++) await who.u('ana').rpc('reserve_invite_slot');
+    const [n] = await who.owner().q('select count(*)::int as n from public.invite_attempts where actor_id = $1', [U.ana]);
+    expect(n!.n).toBe(0);
+  });
+
+  it('janela deslizante: tentativas com mais de 1 hora não contam', async () => {
+    const bruno = who.u('bruno');
+    for (let i = 0; i < 30; i++) await bruno.rpc('reserve_invite_slot');
+    await who.owner().q("update public.invite_attempts set created_at = now() - interval '61 minutes' where actor_id = $1", [U.bruno]);
+    await bruno.rpc('reserve_invite_slot'); // volta a ter vagas
+  });
+
+  it('só quem está autenticado e ativo reserva; a tabela de tentativas não é legível pela API', async () => {
+    expect((await who.anon().rpcErr('reserve_invite_slot')).code).toBe('42501');
+    expect((await who.u('paulo').rpcErr('reserve_invite_slot')).code).toBe('PT401'); // conta inativa
+    await who.u('bruno').rpc('reserve_invite_slot');
+    expect((await who.u('bruno').err('select * from public.invite_attempts')).code).toBe('42501');
+    expect((await who.u('bruno').err('delete from public.invite_attempts')).code).toBe('42501'); // não dá para "zerar" o limite
+    expect((await who.u('bruno').err('insert into public.invite_attempts (actor_id) values ($1)', [U.bruno])).code).toBe('42501');
+  });
+
+  it('create_membership direto não consome nem depende do limite (ele só liga contas já ativas)', async () => {
+    const bruno = who.u('bruno');
+    for (let i = 0; i < 30; i++) await bruno.rpc('reserve_invite_slot');
+    expect((await bruno.rpc('create_membership', S.alfa, U.ines, 'funcionario', '', CALENDAR_ONLY))[0]!.r).toBeTruthy();
   });
 });
 

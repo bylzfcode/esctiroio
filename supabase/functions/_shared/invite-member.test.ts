@@ -24,6 +24,7 @@ function fakeDeps(over: Partial<InviteDeps> = {}) {
   const deps: InviteDeps = {
     verifyCaller: log('verifyCaller', CALLER) as InviteDeps['verifyCaller'],
     precheck: log('precheck', undefined) as InviteDeps['precheck'],
+    reserveSlot: log('reserveSlot', undefined) as InviteDeps['reserveSlot'],
     findAccount: log('findAccount', null) as InviteDeps['findAccount'],
     inviteAccount: log('inviteAccount', 'novo-id') as InviteDeps['inviteAccount'],
     activateAccount: log('activateAccount', undefined) as InviteDeps['activateAccount'],
@@ -67,7 +68,7 @@ describe('autorização antes de qualquer efeito', () => {
     });
     const r = await handleInvite(`Bearer ${TOKEN}`, body(), deps);
     expect(r.status).toBe(403);
-    expect(names()).toEqual(['verifyCaller']);
+    expect(names()).toEqual(['verifyCaller']); // o pré-check substituído lança antes de qualquer outra chamada
   });
 
   it('responsável tentando conceder papel de responsável: 403 do banco, sem convite', async () => {
@@ -98,7 +99,7 @@ describe('convite e reaproveitamento de conta', () => {
     const { deps, calls, names } = fakeDeps();
     const r = await handleInvite(`Bearer ${TOKEN}`, body(), deps);
     expect(r).toEqual({ status: 200, body: { ok: true } });
-    expect(names()).toEqual(['verifyCaller', 'precheck', 'findAccount', 'inviteAccount', 'activateAccount', 'createMembership']);
+    expect(names()).toEqual(['verifyCaller', 'precheck', 'reserveSlot', 'findAccount', 'inviteAccount', 'activateAccount', 'createMembership']);
     expect(calls.find((c) => c.startsWith('inviteAccount'))).toContain('nova.pessoa@demo.example'); // normalizado
     expect(calls.find((c) => c.startsWith('activateAccount'))).toBe(`activateAccount:["novo-id","Nova Pessoa","${CALLER}"]`);
   });
@@ -107,7 +108,7 @@ describe('convite e reaproveitamento de conta', () => {
     const { deps, calls, names } = fakeDeps({ findAccount: async () => ({ id: 'existente', activated: true }) });
     const r = await handleInvite(`Bearer ${TOKEN}`, body(), deps);
     expect(r.status).toBe(200);
-    expect(names()).toEqual(['verifyCaller', 'precheck', 'createMembership']);
+    expect(names()).toEqual(['verifyCaller', 'precheck', 'reserveSlot', 'createMembership']);
     expect(calls.find((c) => c.startsWith('createMembership'))).toContain('"personId":"existente"');
   });
 
@@ -131,7 +132,7 @@ describe('convite e reaproveitamento de conta', () => {
     const { deps, names } = fakeDeps({ findAccount: async () => ({ id: 'pendente', activated: false }) });
     const r = await handleInvite(`Bearer ${TOKEN}`, body(), deps);
     expect(r.status).toBe(200);
-    expect(names()).toEqual(['verifyCaller', 'precheck', 'activateAccount', 'createMembership']);
+    expect(names()).toEqual(['verifyCaller', 'precheck', 'reserveSlot', 'activateAccount', 'createMembership']);
   });
 
   it('falha ao enviar o convite: 502 genérico e nenhum vínculo criado', async () => {
@@ -166,15 +167,32 @@ describe('erros do banco chegam ao formulário', () => {
     expect(await handleInvite(`Bearer ${TOKEN}`, body(), val.deps)).toMatchObject({ status: 422, body: { fieldErrors: { jobTitle: expect.any(String) } } });
   });
 
-  it('limite de cadastros por hora vira 429 e não convida', async () => {
+  it('limite por hora estourado: 429, e NÃO consulta contas nem convida (a reserva vem antes)', async () => {
     const { deps, names } = fakeDeps({
-      precheck: async () => {
-        throw new RpcFailure('Limite de cadastros por hora atingido. Tente novamente mais tarde.', 'PT429');
+      reserveSlot: async () => {
+        throw new RpcFailure('Limite de convites por hora atingido. Tente novamente mais tarde.', 'PT429');
       },
     });
     const r = await handleInvite(`Bearer ${TOKEN}`, body(), deps);
     expect(r.status).toBe(429);
-    expect(names()).not.toContain('inviteAccount');
+    expect(names()).toEqual(['verifyCaller', 'precheck']);
+  });
+
+  it('quem não tem permissão não consome vaga do limite', async () => {
+    const { deps, names } = fakeDeps({
+      precheck: async () => {
+        throw new RpcFailure('Você não tem permissão para cadastrar pessoas nesta loja.', 'PT403');
+      },
+    });
+    await handleInvite(`Bearer ${TOKEN}`, body(), deps);
+    expect(names()).not.toContain('reserveSlot');
+  });
+
+  it('o token do chamador é usado também na reserva', async () => {
+    const seen: string[] = [];
+    const { deps } = fakeDeps({ reserveSlot: async (t) => void seen.push(t) });
+    await handleInvite(`Bearer ${TOKEN}`, body(), deps);
+    expect(seen).toEqual([TOKEN]);
   });
 
   it('erro inesperado do banco vira 500 genérico', async () => {

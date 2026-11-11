@@ -1,6 +1,6 @@
 # Configuração do Supabase LOCAL (`supabase start`). Não afeta o projeto hospedado: para ele,
 # aplique os mesmos ajustes no painel (veja docs/BACKEND.md, seção "Projeto hospedado").
-# NOTA: este arquivo não pôde ser validado com a CLI no ambiente em que foi escrito.
+# Validado com a Supabase CLI 3.1.0 (`supabase start`): sem avisos.
 project_id = "esctiroio"
 
 [api]
@@ -34,10 +34,18 @@ minimum_password_length = 10
 password_requirements = "lower_upper_letters_digits"
 
 [auth.email]
-enable_signup = false
+# O cadastro público é desligado pelo `enable_signup = false` de [auth] (verificado: signup_disabled).
 double_confirm_changes = true
 enable_confirmations = true
 secure_password_change = true
+
+[auth.rate_limit]
+# SÓ LOCAL: a validação dispara dezenas de convites. Em um projeto hospedado o limite de e-mails do
+# Auth é GLOBAL (não por pessoa) e vem do painel: por isso o limite por pessoa fica no banco
+# (reserve_invite_slot). Ajuste os limites do painel conforme seu SMTP.
+email_sent = 200
+sign_in_sign_ups = 300
+token_refresh = 300
 
 [functions.invite-member]
 verify_jwt = true

@@ -1,4 +1,4 @@
-import { Modal } from '../ui/Modal';
+import { Modal } from '@/components/ui/Modal';
 import { DemoProfileList } from './DemoProfileList';
 
 export function DemoProfileModal({

@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { defaultScope, isScopeAllowed, NO_ACCESS, resolveAccess, type AccessContext } from '@/domain/access';
 import type { Membership, Person, Scope, Store } from '@/domain/types';
 import { readJSON, removeKey, writeJSON } from '@/lib/storage';
 import { services } from '@/services';
 import { ServiceError, errorMessage } from '@/services/errors';
 import type { Actor, SessionSnapshot } from '@/services/types';
+import { REVALIDATE_EVENT } from '@/config/bootstrap';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 
@@ -38,8 +39,11 @@ interface SessionValue {
   selectProfile: (personId: string) => void;
   leaveDemo: () => void;
   setScope: (scope: Scope) => void;
-  /** Recarrega vínculos/lojas depois de alterações de equipe. */
-  refresh: () => Promise<void>;
+  /**
+   * Recarrega vínculos/lojas. Por padrão sempre notifica as telas (útil após alterações de equipe);
+   * com `onlyIfChanged`, só atualiza se a resposta do servidor for diferente (revalidação silenciosa).
+   */
+  refresh: (opts?: { onlyIfChanged?: boolean }) => Promise<void>;
   retry: () => void;
 }
 
@@ -162,12 +166,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStored((s) => (s ? { ...s, scope: next } : s));
   }, []);
 
-  const refresh = useCallback(async () => {
-    if (!personId) return;
-    const snap = await services.session.loadSnapshot({ personId });
-    setSnapshot(snap);
-    setDataVersion((v) => v + 1);
-  }, [personId]);
+  const snapshotRef = useRef<SessionSnapshot | null>(null);
+  snapshotRef.current = snapshot;
+
+  const refresh = useCallback(
+    async (opts?: { onlyIfChanged?: boolean }) => {
+      if (!personId) return;
+      const snap = await services.session.loadSnapshot({ personId });
+      if (opts?.onlyIfChanged && JSON.stringify(snap) === JSON.stringify(snapshotRef.current)) return; // evita laço de recarga
+      setSnapshot(snap);
+      setDataVersion((v) => v + 1);
+    },
+    [personId],
+  );
 
   // Modo real: ao voltar para a aba, revalida no servidor. Se a conta ou o vínculo foi desativado
   // enquanto a aba ficou aberta, a interface reflete isso sem esperar o próximo clique.
@@ -186,6 +197,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [live, personId, refresh]);
+
+  // Modo real: o servidor respondeu "proibido" em alguma chamada. Pode ser só uma ação negada, ou o sinal de
+  // que o vínculo/permissões mudaram: revalida a sessão (no máximo a cada 3 s, e só atualiza se algo mudou).
+  useEffect(() => {
+    if (!live || !personId) return;
+    let last = 0;
+    const onRevalidate = () => {
+      if (Date.now() - last < 3000) return;
+      last = Date.now();
+      refresh({ onlyIfChanged: true }).catch((err: unknown) => {
+        if (err instanceof ServiceError && err.code === 'forbidden') {
+          setError(err.message);
+          setStatus('erro');
+        }
+      });
+    };
+    window.addEventListener(REVALIDATE_EVENT, onRevalidate);
+    return () => window.removeEventListener(REVALIDATE_EVENT, onRevalidate);
   }, [live, personId, refresh]);
 
   const value = useMemo<SessionValue>(
