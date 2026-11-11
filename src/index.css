@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cores semânticas (canais RGB). Claro é o padrão; .dark redefine as mesmas variáveis. */
+:root {
+  --c-page: 248 250 252;
+  --c-surface: 255 255 255;
+  --c-subtle: 241 245 249;
+  --c-line: 226 232 240;
+  --c-ink: 15 23 42;
+  --c-mute: 71 85 105;
+  --c-brand: 59 91 219;
+  --c-brand-strong: 48 76 190;
+  --c-brand-soft: 237 242 255;
+  --c-brand-ink: 48 71 172;
+  --c-danger: 190 30 45;
+  --c-danger-soft: 254 242 242;
+  --c-success: 21 128 61;
+  --c-success-soft: 240 253 244;
+  --c-warn: 161 72 8;
+  --c-warn-soft: 255 247 237;
+  color-scheme: light;
+}
+
+.dark {
+  --c-page: 14 17 24;
+  --c-surface: 22 27 37;
+  --c-subtle: 31 37 50;
+  --c-line: 46 54 70;
+  --c-ink: 232 236 243;
+  --c-mute: 155 166 183;
+  --c-brand: 79 109 232;
+  --c-brand-strong: 99 128 245;
+  --c-brand-soft: 30 40 78;
+  --c-brand-ink: 165 180 252;
+  --c-danger: 248 113 113;
+  --c-danger-soft: 60 28 32;
+  --c-success: 74 222 128;
+  --c-success-soft: 20 48 36;
+  --c-warn: 251 191 36;
+  --c-warn-soft: 58 44 14;
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-page font-sans text-sm text-ink antialiased;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-surface;
+  }
+  /* Respeita preferência por menos animação */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .input {
+    @apply block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-mute/70 disabled:cursor-not-allowed disabled:bg-subtle disabled:text-mute;
+  }
+  .input-error {
+    @apply border-danger;
+  }
+}
