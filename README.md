@@ -1,7 +1,7 @@
 # Painel de Lojas
 
 Sistema administrativo para quatro ou mais lojas: **autenticação, lojas, equipe, permissões e auditoria**.
-Financeiro e calendário ainda não existem (apenas estados vazios).
+Financeiro (contas e liquidações por loja) existe só no backend real; calendário ainda não (estado vazio).
 
 O app tem **dois modos, sempre explícitos e separados**:
 
@@ -128,7 +128,7 @@ docs/BACKEND.md
 
 ## O que ainda não existe
 
-- Financeiro, calendário e exportação (as permissões existem; não há ações).
+- Calendário e exportação; financeiro além de contas/liquidações (rateio, recorrência, reembolsos). Detalhes em `docs/BACKEND.md`.
 - Telas para criar/editar lojas, reenviar convites e exportar auditoria.
 - MFA e política de cabeçalhos HTTP (CSP) no repositório (dependem do host).
 - Execução automatizada em CI e a validação do projeto **hospedado** (veja `docs/BACKEND.md`).

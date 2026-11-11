@@ -79,4 +79,6 @@ export async function seedScenario(db: Db) {
   // Dados de auditoria do cenário são gerados pelos gatilhos; limpamos o ruído de "Sistema".
 }
 
+/** Permissões financeiras completas (inclui as ações novas). Os fixtures antigos NÃO as têm, de propósito. */
+export const FIN_FULL = ['view', 'create', 'edit', 'delete', 'export', 'settle', 'reverse', 'confirm_send'];
 export const as_user = (key: keyof typeof U) => ({ user: U[key] });

@@ -2,7 +2,12 @@
 // (Membership) são entidades separadas: a conta é única, os vínculos variam por loja.
 
 export type ModuleId = 'overview' | 'finance' | 'team' | 'calendar' | 'activity' | 'settings';
-export type ActionId = 'view' | 'create' | 'edit' | 'delete' | 'export';
+/**
+ * Ações de permissão. `settle`, `reverse` e `confirm_send` existem SOMENTE no módulo Financeiro
+ * (confirmar liquidação e anexar comprovante, estornar, registrar envio do comprovante).
+ * No Financeiro, `delete` significa CANCELAR conta: nada financeiro é apagado.
+ */
+export type ActionId = 'view' | 'create' | 'edit' | 'delete' | 'export' | 'settle' | 'reverse' | 'confirm_send';
 
 /** Ações liberadas por módulo. Módulo ausente = sem acesso. */
 export type PermissionSet = Partial<Record<ModuleId, ActionId[]>>;

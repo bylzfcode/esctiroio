@@ -6,6 +6,9 @@ export const ACTIONS: { id: ActionId; label: string }[] = [
   { id: 'edit', label: 'Editar' },
   { id: 'delete', label: 'Excluir' },
   { id: 'export', label: 'Exportar' },
+  { id: 'settle', label: 'Confirmar liquidação' },
+  { id: 'reverse', label: 'Estornar' },
+  { id: 'confirm_send', label: 'Confirmar envio' },
 ];
 
 export interface ModuleDef {
@@ -19,10 +22,11 @@ export interface ModuleDef {
 }
 
 const ALL: ActionId[] = ['view', 'create', 'edit', 'delete', 'export'];
+const FINANCE: ActionId[] = [...ALL, 'settle', 'reverse', 'confirm_send'];
 
 export const MODULES: ModuleDef[] = [
   { id: 'overview', label: 'Visão geral', description: 'Resumo da loja e atalhos', actions: ['view'] },
-  { id: 'finance', label: 'Financeiro', description: 'Módulo previsto para a próxima etapa', actions: ALL },
+  { id: 'finance', label: 'Financeiro', description: 'Contas a pagar e a receber, liquidações e comprovantes', actions: FINANCE },
   {
     id: 'team',
     label: 'Equipe e permissões',

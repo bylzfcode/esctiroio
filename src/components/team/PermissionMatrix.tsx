@@ -33,7 +33,7 @@ export function PermissionMatrix({ value, onChange, role, actorPermissions, disa
   return (
     <div>
       <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full min-w-[34rem] border-collapse text-sm">
+        <table className="w-full min-w-[46rem] border-collapse text-sm">
           <caption className="sr-only">Permissões por módulo e ação</caption>
           <thead>
             <tr className="bg-subtle text-left text-xs text-mute">
@@ -92,6 +92,7 @@ export function PermissionMatrix({ value, onChange, role, actorPermissions, disa
           <Lock className="mr-1 inline h-3 w-3" aria-hidden />
           Cadeado: você não pode conceder uma permissão que não possui.
         </li>
+        <li>Em Financeiro, “Excluir” significa <strong className="font-medium">cancelar conta</strong> (nada financeiro é apagado); “Confirmar liquidação” também permite anexar comprovante.</li>
         {role === 'funcionario' && <li>Funcionários só podem consultar Equipe e permissões; a gestão é de responsáveis.</li>}
       </ul>
     </div>

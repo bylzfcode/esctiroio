@@ -1,7 +1,7 @@
 // As regras de permissão existem em dois lugares: TypeScript (interface/demo) e SQL (servidor).
 // Este teste garante que continuam equivalentes.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MODULES } from '@/domain/modules';
+import { ACTIONS, MODULES } from '@/domain/modules';
 import { changesBeyondActor, normalizePermissions } from '@/domain/permissions';
 import type { ActionId, PermissionSet, StoreRole } from '@/domain/types';
 import { openDb, type Db } from './support/harness';
@@ -15,7 +15,7 @@ afterAll(async () => db?.close());
 // Gerador pseudoaleatório determinístico (testes reprodutíveis).
 let seed = 20261111;
 const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
-const ALL_ACTIONS: ActionId[] = ['view', 'create', 'edit', 'delete', 'export'];
+const ALL_ACTIONS: ActionId[] = ACTIONS.map((a) => a.id);
 
 function randomPerms(): PermissionSet {
   const out: PermissionSet = {};

@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ServiceError } from '../errors';
 import type { ActivityService, ConsolidatedSummary, OverviewService, PersonOverview, Services, SessionService, TeamMemberRow, TeamService } from '../types';
 import { createAuthService } from './auth';
+import { createFinanceService } from './finance';
 import {
   SESSION_EXPIRED,
   fromFunctionBody,
@@ -178,5 +179,7 @@ export function createSupabaseServices(client: SupabaseClient, options: LiveOpti
     },
   };
 
-  return { session, team, activity, overview, auth: createAuthService(client) };
+  const finance = createFinanceService(client, { rpc, mapThrown, notify });
+
+  return { session, team, activity, overview, finance, auth: createAuthService(client) };
 }

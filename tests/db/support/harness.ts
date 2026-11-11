@@ -24,18 +24,31 @@ export interface Db {
 const ROOT = join(__dirname, '..', '..', '..');
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-export async function openDb(): Promise<Db> {
-  const url = process.env.TEST_DATABASE_URL;
-  const db = url ? await openPg(url) : await openPglite();
-  await db.exec(readFileSync(join(__dirname, 'supabase-stub.sql'), 'utf8'));
-  const dir = join(ROOT, 'supabase', 'migrations');
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+export interface OpenOptions {
+  /** Aplica somente as migrações com versão <= este prefixo (ex.: '20261111000700'). */
+  upTo?: string;
+}
+
+const migrationFiles = () => readdirSync(join(ROOT, 'supabase', 'migrations')).filter((f) => f.endsWith('.sql')).sort();
+
+/** Aplica as migrações cuja versão (prefixo do nome) esteja no intervalo (after, upTo]. */
+export async function applyMigrations(db: Db, opts: { after?: string; upTo?: string } = {}) {
+  for (const file of migrationFiles()) {
+    const version = file.split('_')[0]!;
+    if ((opts.after && version <= opts.after) || (opts.upTo && version > opts.upTo)) continue;
     try {
-      await db.exec(readFileSync(join(dir, file), 'utf8'));
+      await db.exec(readFileSync(join(ROOT, 'supabase', 'migrations', file), 'utf8'));
     } catch (e) {
       throw new Error(`Falha na migração ${file}: ${(e as Error).message}`);
     }
   }
+}
+
+export async function openDb(opts: OpenOptions = {}): Promise<Db> {
+  const url = process.env.TEST_DATABASE_URL;
+  const db = url ? await openPg(url) : await openPglite();
+  await db.exec(readFileSync(join(__dirname, 'supabase-stub.sql'), 'utf8'));
+  await applyMigrations(db, { upTo: opts.upTo });
   return db;
 }
 
@@ -103,7 +116,8 @@ export function as(db: Db, who: Who): Caller {
     try {
       return await db.query(sql, params);
     } finally {
-      await db.exec('reset role');
+      // Se a consulta falhou a transação está abortada e RESET ROLE também falharia, mascarando o erro real.
+      await db.exec('reset role').catch(() => {});
     }
   };
   const guarded = async (sql: string, params?: unknown[]): Promise<DbError> => {
@@ -132,4 +146,4 @@ export function as(db: Db, who: Who): Caller {
 
 /** Transação por teste: tudo é desfeito ao final (os fixtures ficam commitados no beforeAll). */
 export const begin = (db: Db) => db.exec('begin');
-export const rollback = (db: Db) => db.exec('reset role; rollback');
+export const rollback = (db: Db) => db.exec('rollback; reset role');

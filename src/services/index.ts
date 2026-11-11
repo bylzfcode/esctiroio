@@ -19,4 +19,5 @@ export function setServices(next: Services): void {
 }
 
 export * from './errors';
+export { ReceiptUploadError } from './types';
 export type * from './types';

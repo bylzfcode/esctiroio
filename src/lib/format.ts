@@ -1,5 +1,6 @@
-const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-const dateOnly = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' });
+// Instantes são sempre apresentados em America/Sao_Paulo, independentemente do fuso do navegador.
+const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' });
+const dateOnly = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeZone: 'America/Sao_Paulo' });
 
 export const formatDateTime = (iso: string) => dateTime.format(new Date(iso));
 export const formatDate = (iso: string) => dateOnly.format(new Date(iso));

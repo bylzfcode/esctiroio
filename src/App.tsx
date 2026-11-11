@@ -105,7 +105,7 @@ export default function App() {
       ) : (
         <Routes>
           <Route path={NAV_BY_MODULE.overview.path} element={guard('overview', <OverviewPage />)} />
-          <Route path={NAV_BY_MODULE.finance.path} element={guard('finance', <FinancePage />)} />
+          <Route path={`${NAV_BY_MODULE.finance.path}/*`} element={guard('finance', <FinancePage />)} />
           <Route path={NAV_BY_MODULE.team.path} element={guard('team', <TeamPage />)} />
           <Route path={NAV_BY_MODULE.calendar.path} element={guard('calendar', <CalendarPage />)} />
           <Route path={NAV_BY_MODULE.activity.path} element={guard('activity', <ActivityPage />)} />

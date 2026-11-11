@@ -153,11 +153,162 @@ export interface DemoControls {
   isSimulatingFailure(): boolean;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Financeiro (contas exclusivas de uma loja e suas liquidações). Valores em CENTAVOS (BRL), datas 'AAAA-MM-DD'
+// sem fuso. Saldo, situação e atraso são calculados no SERVIDOR. A identidade é a da sessão autenticada.
+// ---------------------------------------------------------------------------------------------
+export type FinanceKind = 'payable' | 'receivable';
+export type FinanceSituation = 'pending' | 'partial' | 'paid' | 'canceled';
+export type PaymentMethod = 'pix' | 'dinheiro' | 'transferencia' | 'boleto' | 'cartao_debito' | 'cartao_credito' | 'cheque' | 'outro';
+
+export interface FinanceAccount {
+  id: string;
+  storeId: string;
+  storeName: string;
+  kind: FinanceKind;
+  description: string;
+  category: string;
+  counterparty: string;
+  amountCents: number;
+  currency: 'BRL';
+  competenceDate: string;
+  dueDate: string;
+  notes: string;
+  status: 'open' | 'canceled';
+  situation: FinanceSituation;
+  /** Vencimento anterior a hoje (America/Sao_Paulo) E saldo em aberto. Calculado no servidor. */
+  isOverdue: boolean;
+  settledCents: number;
+  balanceCents: number;
+  paymentsCount: number;
+  /** Comprovantes anexados cujo envio ainda não foi confirmado. */
+  receiptsPending: number;
+  createdByName: string | null;
+  createdAt: string;
+}
+
+export interface FinancePayment {
+  id: string;
+  amountCents: number;
+  paidOn: string;
+  method: PaymentMethod;
+  notes: string;
+  createdByName: string;
+  createdAt: string;
+  reversedAt: string | null;
+  reversedByName: string | null;
+  reversalReason: string | null;
+  receipt: { path: string; name: string; mime: string; size: number; attachedAt: string; attachedByName: string | null } | null;
+  /** Confirmação MANUAL de envio do comprovante (o sistema não envia mensagens). */
+  receiptSent: { at: string; byName: string | null; note: string | null } | null;
+}
+
+export interface FinanceAccountDetail {
+  account: FinanceAccount & { canceledAt: string | null; canceledByName: string | null; cancelReason: string | null; updatedAt: string };
+  payments: FinancePayment[];
+}
+
+export interface FinanceFilters {
+  kind?: FinanceKind;
+  /** 'open' = pendente + parcial. */
+  status?: 'open' | FinanceSituation;
+  competenceFrom?: string;
+  competenceTo?: string;
+  dueFrom?: string;
+  dueTo?: string;
+  search?: string;
+  overdueOnly?: boolean;
+  receiptPending?: boolean;
+}
+
+export interface FinanceBucket {
+  count: number;
+  amountCents: number;
+  settledCents: number;
+  /** Saldo das contas pendentes ou parciais. */
+  openCents: number;
+  /** Saldo em atraso. */
+  overdueCents: number;
+  overdueCount: number;
+}
+
+export interface FinanceSummary {
+  /** Dia civil de São Paulo usado no cálculo de atraso. */
+  today: string;
+  payable: FinanceBucket;
+  receivable: FinanceBucket;
+  canceledCount: number;
+  receiptsPendingCount: number;
+  /** Só na visão consolidada. O total é a soma destas linhas: cada conta é contada uma vez. */
+  byStore: { storeId: string; storeName: string; payable: FinanceBucket; receivable: FinanceBucket }[] | null;
+}
+
+export interface FinanceHistoryEntry {
+  id: string;
+  at: string;
+  actorName: string;
+  action: string;
+  summary: string;
+}
+
+export interface FinanceAccountInput {
+  kind: FinanceKind;
+  description: string;
+  category: string;
+  counterparty: string;
+  amountCents: number;
+  competenceDate: string;
+  dueDate: string;
+  notes: string;
+  /** Mesma chave = mesma requisição: repetir não duplica a conta. */
+  idempotencyKey?: string;
+}
+
+export interface PaymentInput {
+  amountCents: number;
+  paidOn: string;
+  method: PaymentMethod;
+  notes: string;
+  /** Gerada uma vez por tentativa de confirmação; repetir/clicar duas vezes não duplica o pagamento. */
+  idempotencyKey: string;
+}
+
+/** Erro ao enviar/vincular o comprovante DEPOIS de o pagamento já estar salvo (não repetir o pagamento). */
+export class ReceiptUploadError extends Error {
+  constructor(
+    message: string,
+    readonly stage: 'upload' | 'attach',
+  ) {
+    super(message);
+    this.name = 'ReceiptUploadError';
+  }
+}
+
+export interface FinanceService {
+  /** storeId nulo = visão consolidada (somente administrador geral). */
+  list(storeId: string | null, filters: FinanceFilters, page: { limit: number; offset: number }): Promise<{ rows: FinanceAccount[]; total: number }>;
+  summary(storeId: string | null, filters: FinanceFilters): Promise<FinanceSummary>;
+  get(accountId: string): Promise<FinanceAccountDetail>;
+  history(accountId: string): Promise<FinanceHistoryEntry[]>;
+  createAccount(storeId: string, input: FinanceAccountInput): Promise<string>;
+  updateAccount(accountId: string, input: Omit<FinanceAccountInput, 'kind' | 'idempotencyKey'>): Promise<void>;
+  cancelAccount(accountId: string, reason: string): Promise<void>;
+  confirmPayment(accountId: string, input: PaymentInput): Promise<string>;
+  reversePayment(paymentId: string, reason: string): Promise<void>;
+  /** Envia o arquivo ao armazenamento privado e o vincula à liquidação. Lança ReceiptUploadError. NÃO confirma envio. */
+  attachReceipt(payment: { id: string; storeId: string; accountId: string }, file: File): Promise<void>;
+  /** Link temporário (assinado) para ver ou baixar; só para quem pode visualizar o financeiro da loja. */
+  receiptUrl(path: string, opts?: { download?: string }): Promise<string>;
+  confirmReceiptSent(paymentId: string, note?: string): Promise<void>;
+}
+
 export interface Services {
   session: SessionService;
   team: TeamService;
   activity: ActivityService;
   overview: OverviewService;
+  /** Presente apenas no backend real. O financeiro NÃO é simulado na demonstração. */
+  finance?: FinanceService;
   /** Presente apenas no backend real. */
   auth?: AuthService;
   /** Presente apenas no modo demo. */

@@ -87,7 +87,13 @@ export function countViewableModules(perms: PermissionSet): number {
 
 export function describeChange(c: PermissionChange): string {
   const module = MODULE_BY_ID[c.module].label;
-  const action = ACTIONS.find((a) => a.id === c.action)?.label.toLowerCase() ?? c.action;
+  // Mesmos textos do servidor (private.permissions_diff_text).
+  const action =
+    c.module === 'finance' && c.action === 'delete'
+      ? 'cancelar conta'
+      : c.action === 'confirm_send'
+        ? 'confirmar envio de comprovante'
+        : (ACTIONS.find((a) => a.id === c.action)?.label.toLowerCase() ?? c.action);
   return `${module}: ${c.granted ? 'liberou' : 'retirou'} ${action}`;
 }
 

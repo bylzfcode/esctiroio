@@ -221,7 +221,7 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  ok  ', msg); } el
   await page.getByRole('button', { name: 'Usar tema escuro' }).click();
   ok(await page.locator('html').evaluate((e) => e.classList.contains('dark')), 'tema escuro ativa');
   await navLink('Financeiro').click();
-  await page.getByText('será implementado nas próximas etapas').waitFor();
+  await page.getByText('Financeiro indisponível na demonstração').waitFor();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/09-financeiro-escuro.png` });
   await switchProfile('Ana Ribeiro');
   await navLink('Configurações').click();

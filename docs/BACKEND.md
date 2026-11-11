@@ -278,6 +278,46 @@ na ativação, a conta fica inativa e a repetição a ativa. Cada tentativa cons
 > recriado com as mesmas configurações da CLI, apontando para um espelho local do registro npm. Isso é
 > específico desta sandbox e **não é necessário** em uma máquina comum.
 
+## Módulo financeiro (parte 1: contas e liquidações de uma loja)
+
+**Migrações** (aditivas; as anteriores não foram alteradas): `20261112000100_finance_permissions`,
+`…000200_finance_schema`, `…000300_finance_rpc`, `…000400_finance_receipts_storage`.
+
+- **Modelo.** `finance_accounts` (a pagar/receber, exclusiva de **uma** loja, valor em centavos `bigint`,
+  competência/vencimento como `date` sem fuso) e `finance_payments` (liquidações). Situação, saldo e atraso
+  vêm da view `finance_accounts_v` (`security_invoker`): `pendente`, `parcial`, `quitada`, `cancelada`; atraso =
+  vencimento < hoje em America/Sao_Paulo **e** saldo em aberto > 0. Nada é gravado como "situação".
+- **Invariantes no banco (gatilhos, valem para qualquer escritor):** liquidação > 0 e ≤ saldo; loja, tipo e
+  moeda imutáveis; valor da conta nunca abaixo do já liquidado; sem DELETE/TRUNCATE; pagamento imutável exceto
+  estorno, anexo e confirmação de envio. `FOR UPDATE` na conta serializa liquidações concorrentes.
+- **Idempotência:** `(conta, chave)` e `(loja, chave)`. Repetir a mesma requisição devolve a mesma liquidação.
+- **Estorno** exige motivo, preserva a linha e devolve o saldo. Conta com liquidações ativas só é cancelada
+  depois de estorná-las.
+- **Comprovantes:** bucket privado `receipts` (5 MiB; jpeg/png/webp/pdf), caminho
+  `{loja}/{conta}/{pagamento}/{arquivo}`. Ver/baixar exige `finance.view` na loja; enviar exige
+  `finance.settle` e pagamento existente, não estornado e sem comprovante; sem update/delete. A RPC
+  `attach_payment_receipt` lê os metadados do próprio Storage. **Anexar não confirma envio:** a
+  confirmação (`confirm_receipt_sent`, quem/quando) é separada e exige a ação `confirm_send`; o sistema não envia nada.
+- **Permissões** (módulo `finance`): `view`, `create`, `edit`, `delete` (= **cancelar conta**), `export`, e as
+  novas `settle`, `reverse`, `confirm_send`. **A migração não altera `memberships.permissions`**: ninguém ganha
+  ação nova automaticamente (nem responsáveis existentes); um administrador geral ou responsável concede pela matriz.
+  Consolidado (todas as lojas) é somente leitura e exclusivo de administrador geral.
+- **Auditoria:** gatilhos gravam `financeiro_*` em `audit_log`; o histórico por conta vem da RPC
+  `finance_account_history` (exige `finance.view`).
+
+**Verificação (local, pilha real, sem nada remoto):** `supabase db reset` aplica as 11 migrações do zero;
+testes de banco (PGlite 84+, PostgreSQL 16 real 93/93, incluindo 10 liquidações simultâneas disputando o mesmo
+saldo — removendo o `FOR UPDATE` o teste falha); `tests/live` 44/44 contra Auth/PostgREST/Storage/Edge reais
+(permissões por HTTP com identidades distintas, parciais, estorno, repetição, acesso a anexos, concorrência,
+filtros/resumos); UI com navegador contra a pilha real: `e2e/finance-ui.cjs` 39/39, `e2e/stack-ui.cjs` 31/31,
+`e2e/fluxos.cjs` (demo) 46/46.
+
+**Limitações do financeiro:** o tipo real do arquivo é conferido por mime/tamanho no Storage e por *magic bytes*
+no cliente (sem varredura de conteúdo no servidor); comprovante não pode ser trocado depois de anexado e a
+confirmação de envio não pode ser desfeita (corrija estornando e relançando); um upload que falha após o
+pagamento salvo pode deixar objeto órfão no Storage (a liquidação não duplica ao repetir); o modo demonstração
+não simula o financeiro; sem rateio, reembolso entre lojas, recorrência, exportação nem transferências bancárias.
+
 ## Limitações conhecidas e passos restantes
 
 - **Resíduos de enumeração** (aceitos, documentados): um responsável vê erro específico para e-mails já
@@ -291,5 +331,5 @@ na ativação, a conta fica inativa e a repetição a ativa. Cada tentativa cons
 - **Sem telas** para criar/editar lojas, reenviar convites ou exportar auditoria. Lojas: SQL (acima).
 - **Sem MFA**, limitação de tentativas de login além da do Supabase, nem CSP aplicada pelo repositório
   (depende do host).
-- **Financeiro, calendário e exportação** continuam não implementados (as permissões já existem no modelo).
+- **Calendário e exportação** continuam não implementados; o financeiro cobre só contas e liquidações (ver seção acima).
 - Falta a verificação do projeto **hospedado** (painel, SMTP, `db push`, deploy da função): veja a tabela acima.
