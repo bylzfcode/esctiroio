@@ -1,12 +1,16 @@
-import { ChevronDown, Repeat } from 'lucide-react';
+import { ChevronDown, LogOut, Repeat } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { ROLE_LABEL } from '@/domain/modules';
+import { useAuth } from '@/context/AuthContext';
 import { useSession } from '@/context/SessionContext';
+import { services } from '@/services';
 import { Avatar } from '../ui/Avatar';
 import { PopoverPanel, usePopoverDismiss } from '../ui/Popover';
 
 export function UserMenu({ onSwitchProfile }: { onSwitchProfile: () => void }) {
   const { person, access, activeStore } = useSession();
+  const auth = useAuth();
+  const demo = !!services.demo;
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -48,18 +52,33 @@ export function UserMenu({ onSwitchProfile }: { onSwitchProfile: () => void }) {
               </p>
             </div>
             <div className="border-t border-line pt-1">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  onSwitchProfile();
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-ink hover:bg-subtle"
-              >
-                <Repeat className="h-4 w-4 text-mute" aria-hidden />
-                Trocar perfil de demonstração
-              </button>
+              {demo ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onSwitchProfile();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-ink hover:bg-subtle"
+                >
+                  <Repeat className="h-4 w-4 text-mute" aria-hidden />
+                  Trocar perfil de demonstração
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    void auth.signOut();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-ink hover:bg-subtle"
+                >
+                  <LogOut className="h-4 w-4 text-mute" aria-hidden />
+                  Sair
+                </button>
+              )}
             </div>
           </div>
         </PopoverPanel>

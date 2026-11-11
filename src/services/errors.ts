@@ -1,4 +1,4 @@
-export type ServiceErrorCode = 'forbidden' | 'validation' | 'not_found' | 'conflict' | 'unavailable';
+export type ServiceErrorCode = 'unauthorized' | 'forbidden' | 'validation' | 'not_found' | 'conflict' | 'unavailable';
 
 /** Erro previsto da camada de serviços. A mensagem já é apresentável ao usuário. */
 export class ServiceError extends Error {

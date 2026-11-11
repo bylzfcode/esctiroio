@@ -6,7 +6,7 @@ import { useSession } from '@/context/SessionContext';
 import { useToast } from '@/context/ToastContext';
 import { services } from '@/services';
 import { ServiceError, errorMessage } from '@/services/errors';
-import type { AccountLookup, TeamMemberRow } from '@/services/types';
+import type { TeamMemberRow } from '@/services/types';
 import { Button } from '../ui/Button';
 import { SelectField, TextField, Field } from '../ui/Field';
 import { Modal } from '../ui/Modal';
@@ -23,8 +23,6 @@ interface Props {
   onSaved: () => void;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export function MemberFormModal({ open, member, storeId, storeName, onClose, onSaved }: Props) {
   const { actor, access } = useSession();
   const toast = useToast();
@@ -36,8 +34,6 @@ export function MemberFormModal({ open, member, storeId, storeName, onClose, onS
   const [jobTitle, setJobTitle] = useState('');
   const [role, setRole] = useState<StoreRole>('funcionario');
   const [permissions, setPermissions] = useState<PermissionSet>({});
-  const [lookup, setLookup] = useState<AccountLookup | null>(null);
-  const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -47,7 +43,6 @@ export function MemberFormModal({ open, member, storeId, storeName, onClose, onS
     if (!open) return;
     setFieldErrors({});
     setFormError(null);
-    setLookup(null);
     setSaving(false);
     if (member) {
       setEmail(member.person.email);
@@ -65,24 +60,6 @@ export function MemberFormModal({ open, member, storeId, storeName, onClose, onS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, member]);
 
-  const checkEmail = async () => {
-    if (isEdit || !actor) return;
-    const value = email.trim();
-    if (!EMAIL_RE.test(value)) {
-      setLookup(null);
-      return;
-    }
-    setChecking(true);
-    try {
-      setLookup(await services.team.lookupAccount(actor, storeId, value));
-    } catch (err) {
-      setLookup(null);
-      setFormError(errorMessage(err));
-    } finally {
-      setChecking(false);
-    }
-  };
-
   const changeRole = (next: StoreRole) => {
     setRole(next);
     if (!isEdit) {
@@ -96,10 +73,6 @@ export function MemberFormModal({ open, member, storeId, storeName, onClose, onS
       setPermissions((p) => normalizePermissions(p, next));
     }
   };
-
-  const blockingLookup =
-    !isEdit && lookup?.exists && (lookup.isGeneralAdmin || lookup.linkStatus !== undefined);
-  const newAccount = !isEdit && lookup !== null && !lookup.exists;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -117,11 +90,10 @@ export function MemberFormModal({ open, member, storeId, storeName, onClose, onS
         });
         toast.success(`Vínculo de ${member.person.name} atualizado.`);
       } else {
-        await services.team.createMember(actor, storeId, { email, name: lookup?.exists ? undefined : name, jobTitle, role, permissions });
+        await services.team.createMember(actor, storeId, { email, name, jobTitle, role, permissions });
+        // Mensagem única: não revelamos se a pessoa já tinha conta em outra loja.
         toast.success(
-          lookup?.exists
-            ? `${lookup.name} foi vinculado(a) à ${storeName}. A conta já existente foi reaproveitada.`
-            : `Cadastro concluído: ${name.trim()} agora tem acesso à ${storeName}.`,
+          `Vínculo com a ${storeName} criado. Se a pessoa ainda não tiver conta, ela receberá um convite por e-mail.`,
         );
       }
       onSaved();
@@ -147,7 +119,7 @@ export function MemberFormModal({ open, member, storeId, storeName, onClose, onS
           <Button onClick={onClose} disabled={saving}>
             Cancelar
           </Button>
-          <Button variant="primary" type="submit" form="form-membro" loading={saving} disabled={!!blockingLookup || checking}>
+          <Button variant="primary" type="submit" form="form-membro" loading={saving}>
             {isEdit ? 'Salvar alterações' : 'Cadastrar'}
           </Button>
         </>
@@ -166,53 +138,30 @@ export function MemberFormModal({ open, member, storeId, storeName, onClose, onS
             value={email}
             readOnly={isEdit}
             disabled={isEdit}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setLookup(null);
-            }}
-            onBlur={checkEmail}
+            onChange={(e) => setEmail(e.target.value)}
             error={fieldErrors.email}
-            hint={isEdit ? 'O e-mail identifica a conta e não muda por aqui.' : 'Se a pessoa já tiver conta, ela será reaproveitada.'}
+            hint={
+              isEdit
+                ? 'O e-mail identifica a conta e não muda por aqui.'
+                : 'Se a pessoa já tiver conta, ela será reaproveitada; senão, receberá um convite por e-mail.'
+            }
           />
-
-          {checking && <p className="text-xs text-mute">Verificando se já existe uma conta com este e-mail…</p>}
-          {!isEdit && lookup?.exists && !blockingLookup && (
-            <Notice>
-              Conta existente de <strong>{lookup.name}</strong>. Será criado apenas o vínculo com a {storeName}; os dados da
-              conta e os vínculos com outras lojas não são alterados.
-            </Notice>
-          )}
-          {!isEdit && lookup?.exists && lookup.isGeneralAdmin && (
-            <Notice tone="danger">Administradores gerais já acessam todas as lojas e não precisam de vínculo.</Notice>
-          )}
-          {!isEdit && lookup?.exists && !lookup.isGeneralAdmin && lookup.linkStatus === 'ativo' && (
-            <Notice tone="danger">{lookup.name} já está vinculado(a) a esta loja.</Notice>
-          )}
-          {!isEdit && lookup?.exists && !lookup.isGeneralAdmin && lookup.linkStatus === 'inativo' && (
-            <Notice tone="warn">
-              {lookup.name} tem um vínculo desativado nesta loja. Feche esta janela e use “Reativar” na lista de inativos para
-              preservar o histórico e as permissões.
-            </Notice>
-          )}
-
-          {(newAccount || isEdit) && (
-            <TextField
-              label="Nome completo"
-              required
-              value={name}
-              readOnly={isEdit && !isAdmin}
-              disabled={isEdit && !isAdmin}
-              onChange={(e) => setName(e.target.value)}
-              error={fieldErrors.name}
-              hint={
-                isEdit && !isAdmin
-                  ? 'A conta é compartilhada entre lojas; só o administrador geral altera estes dados.'
-                  : newAccount
-                    ? 'Nenhuma conta encontrada: uma nova conta será criada.'
-                    : undefined
-              }
-            />
-          )}
+          <TextField
+            label="Nome completo"
+            required
+            value={name}
+            readOnly={isEdit && !isAdmin}
+            disabled={isEdit && !isAdmin}
+            onChange={(e) => setName(e.target.value)}
+            error={fieldErrors.name}
+            hint={
+              isEdit
+                ? isAdmin
+                  ? 'A conta é compartilhada entre lojas: alterar o nome vale para todas.'
+                  : 'A conta é compartilhada entre lojas; só o administrador geral altera estes dados.'
+                : 'Usado apenas se a pessoa ainda não tiver conta. Em contas existentes, o nome cadastrado é mantido.'
+            }
+          />
         </section>
 
         <section className="space-y-4" aria-label="Vínculo com a loja">
@@ -227,15 +176,13 @@ export function MemberFormModal({ open, member, storeId, storeName, onClose, onS
               hint="Opcional. Ex.: Caixa, Estoquista."
             />
             {isAdmin ? (
-              <SelectField label="Perfil nesta loja" value={role} onChange={(e) => changeRole(e.target.value as StoreRole)}>
+              <SelectField label="Perfil nesta loja" value={role} onChange={(e) => changeRole(e.target.value as StoreRole)} error={fieldErrors.role}>
                 <option value="funcionario">{ROLE_LABEL.funcionario}</option>
                 <option value="responsavel">{ROLE_LABEL.responsavel}</option>
               </SelectField>
             ) : (
-              <Field label="Perfil nesta loja" hint="Responsáveis só gerenciam funcionários.">
-                {({ id }) => (
-                  <input id={id} className="input" value={ROLE_LABEL.funcionario} disabled readOnly />
-                )}
+              <Field label="Perfil nesta loja" hint="Somente o administrador geral concede o papel de responsável.">
+                {({ id }) => <input id={id} className="input" value={ROLE_LABEL.funcionario} disabled readOnly />}
               </Field>
             )}
           </div>

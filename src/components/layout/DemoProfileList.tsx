@@ -16,7 +16,7 @@ const GROUPS: { kind: DemoProfile['kind']; title: string }[] = [
 ];
 
 export function DemoProfileList({ currentId, onSelect }: { currentId?: string | null; onSelect: (personId: string) => void }) {
-  const { data, loading, error, reload } = useAsync(() => services.session.listDemoProfiles(), []);
+  const { data, loading, error, reload } = useAsync(() => services.demo!.listProfiles(), []);
 
   return (
     <div className="space-y-4">

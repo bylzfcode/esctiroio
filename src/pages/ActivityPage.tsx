@@ -1,4 +1,4 @@
-import { History, Search, ShieldCheck, UserCheck, UserPlus, UserX, UserPen, KeyRound } from 'lucide-react';
+import { History, KeyRound, Search, ShieldCheck, ShieldOff, UserCheck, UserPen, UserPlus, UserX, Crown } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ActivityType } from '@/domain/types';
@@ -15,6 +15,11 @@ import { services } from '@/services';
 
 const TYPES: Record<ActivityType, { label: string; icon: LucideIcon }> = {
   conta_criada: { label: 'Conta criada', icon: UserPlus },
+  conta_editada: { label: 'Conta editada', icon: UserPen },
+  conta_desativada: { label: 'Conta desativada', icon: ShieldOff },
+  conta_reativada: { label: 'Conta reativada', icon: UserCheck },
+  admin_concedido: { label: 'Administrador geral concedido', icon: Crown },
+  admin_removido: { label: 'Administrador geral removido', icon: Crown },
   vinculo_criado: { label: 'Vínculo criado', icon: ShieldCheck },
   vinculo_editado: { label: 'Vínculo editado', icon: UserPen },
   permissoes_alteradas: { label: 'Permissões alteradas', icon: KeyRound },
@@ -149,7 +154,7 @@ export default function ActivityPage() {
                         <span>por {a.actorName}</span>
                         <span aria-hidden>·</span>
                         <time dateTime={a.at}>{formatDateTime(a.at)}</time>
-                        {consolidated && <Badge>{a.storeName}</Badge>}
+                        {consolidated && <Badge>{a.storeName ?? 'Todas as lojas'}</Badge>}
                       </p>
                     </div>
                   </li>

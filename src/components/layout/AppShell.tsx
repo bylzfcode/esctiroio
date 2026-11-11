@@ -1,6 +1,7 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import { readString, writeString } from '@/lib/storage';
 import { useSession } from '@/context/SessionContext';
+import { services } from '@/services';
 import { DemoBanner } from './DemoBanner';
 import { DemoProfileModal } from './DemoProfileModal';
 import { Header } from './Header';
@@ -10,6 +11,7 @@ const KEY = 'esctiroio.menu.expandido';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { person, scope, selectProfile } = useSession();
+  const demo = !!services.demo; // faixa e seletor de perfis existem SOMENTE no modo demonstração
   const [expanded, setExpanded] = useState(() => readString(KEY) === '1');
   const [drawer, setDrawer] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
@@ -37,20 +39,22 @@ export function AppShell({ children }: { children: ReactNode }) {
       <MobileDrawer open={drawer} onClose={closeDrawer} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header onOpenMenu={() => setDrawer(true)} onSwitchProfile={() => setProfileModal(true)} />
-        <DemoBanner onSwitchProfile={() => setProfileModal(true)} />
+        {demo && <DemoBanner onSwitchProfile={() => setProfileModal(true)} />}
         <main id="conteudo" key={contextKey} tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 focus:outline-none sm:px-6 sm:py-8">
           {children}
         </main>
       </div>
-      <DemoProfileModal
-        open={profileModal}
-        currentId={person?.id ?? null}
-        onClose={() => setProfileModal(false)}
-        onSelect={(id) => {
-          setProfileModal(false);
-          selectProfile(id);
-        }}
-      />
+      {demo && (
+        <DemoProfileModal
+          open={profileModal}
+          currentId={person?.id ?? null}
+          onClose={() => setProfileModal(false)}
+          onSelect={(id) => {
+            setProfileModal(false);
+            selectProfile(id);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,24 +1,19 @@
 // Contratos da camada de serviços.
-// A interface do app só conhece estes contratos. Para ligar um backend real, crie uma
-// implementação de `Services` (por exemplo com fetch) e troque-a em `services/index.ts`.
-// Toda regra de autorização precisa ser reaplicada NO SERVIDOR: as verificações feitas
-// no navegador servem apenas para orientar a interface.
+// A interface do app só conhece estes contratos. Existem duas implementações:
+//  * services/supabase: backend real (Supabase Auth + PostgreSQL com RLS);
+//  * services/mock: demonstração com dados fictícios no navegador (somente no modo "demo").
+//
+// Toda regra de autorização é aplicada NO SERVIDOR (RLS e funções do banco). As verificações
+// feitas no navegador (menus, botões desabilitados) servem apenas para orientar a interface.
 
 import type { ActivityEntry, Membership, PermissionSet, Person, Store, StoreRole } from '@/domain/types';
 
-/** Quem está agindo. Na demonstração vem do seletor de perfil; em produção virá da sessão autenticada. */
+/**
+ * Quem está agindo. No modo demo vem do seletor de perfil. No backend real é IGNORADO:
+ * o servidor usa a identidade do JWT da sessão autenticada (um cliente nunca escolhe quem é).
+ */
 export interface Actor {
   personId: string;
-}
-
-export interface DemoProfile {
-  person: Person;
-  kind: 'admin' | 'responsavel' | 'funcionario' | 'sem_acesso';
-  /** Resumo textual dos vínculos, apenas para o seletor de demonstração. */
-  summary: string;
-  /** Sugestão do que testar com este perfil. */
-  hint: string;
-  activeLinks: number;
 }
 
 export interface SessionSnapshot {
@@ -43,8 +38,8 @@ export interface PersonOverview {
 
 export interface MemberInput {
   email: string;
-  /** Obrigatório apenas quando a conta ainda não existe. */
-  name?: string;
+  /** Sempre exigido. Só é usado se a pessoa ainda não tiver conta (não revelamos se tem). */
+  name: string;
   jobTitle: string;
   role: StoreRole;
   permissions: PermissionSet;
@@ -56,14 +51,6 @@ export interface MemberUpdate {
   permissions: PermissionSet;
   /** Somente administrador geral pode alterar o nome da conta. */
   name?: string;
-}
-
-export interface AccountLookup {
-  exists: boolean;
-  name?: string;
-  isGeneralAdmin?: boolean;
-  /** Já existe vínculo (ativo ou inativo) com a loja informada. */
-  linkStatus?: 'ativo' | 'inativo';
 }
 
 export interface TeamStats {
@@ -97,17 +84,24 @@ export interface ActivityQuery {
 }
 
 export interface SessionService {
-  listDemoProfiles(): Promise<DemoProfile[]>;
   loadSnapshot(actor: Actor): Promise<SessionSnapshot>;
 }
 
 export interface TeamService {
   listStoreMembers(actor: Actor, storeId: string): Promise<TeamMemberRow[]>;
+  /** Somente administrador geral. */
   listAllPeople(actor: Actor): Promise<PersonOverview[]>;
-  lookupAccount(actor: Actor, storeId: string, email: string): Promise<AccountLookup>;
-  createMember(actor: Actor, storeId: string, input: MemberInput): Promise<Membership>;
-  updateMember(actor: Actor, membershipId: string, input: MemberUpdate): Promise<Membership>;
-  setMemberActive(actor: Actor, membershipId: string, active: boolean): Promise<Membership>;
+  /**
+   * Vincula uma pessoa à loja. Se o e-mail já tiver conta, a identidade é reaproveitada e só o
+   * vínculo é criado; senão a pessoa recebe um convite. O resultado é o mesmo nos dois casos.
+   */
+  createMember(actor: Actor, storeId: string, input: MemberInput): Promise<void>;
+  updateMember(actor: Actor, membershipId: string, input: MemberUpdate): Promise<void>;
+  setMemberActive(actor: Actor, membershipId: string, active: boolean): Promise<void>;
+  /** Somente administrador geral. O servidor impede remover o último administrador ativo. */
+  setGeneralAdmin(actor: Actor, personId: string, value: boolean): Promise<void>;
+  /** Somente administrador geral. Conta desativada perde o acesso a todas as lojas. */
+  setAccountActive(actor: Actor, personId: string, active: boolean): Promise<void>;
 }
 
 export interface ActivityService {
@@ -119,8 +113,41 @@ export interface OverviewService {
   consolidatedSummary(actor: Actor): Promise<ConsolidatedSummary>;
 }
 
-/** Utilidades que só existem na demonstração. Um backend real não implementa isto. */
+export interface AuthSession {
+  userId: string;
+  email: string;
+}
+
+export type AuthEvent =
+  | { type: 'signed_in'; userId: string }
+  | { type: 'signed_out'; reason: 'user' | 'expired' }
+  | { type: 'password_recovery' };
+
+/** Autenticação real. Não existe cadastro público: contas nascem por convite. */
+export interface AuthService {
+  getSession(): Promise<AuthSession | null>;
+  subscribe(listener: (event: AuthEvent) => void): () => void;
+  signIn(email: string, password: string): Promise<void>;
+  signOut(): Promise<void>;
+  /** Resposta sempre genérica: nunca revela se o e-mail existe. */
+  requestPasswordReset(email: string): Promise<void>;
+  /** Define a senha (após convite ou recuperação) da sessão atual. */
+  updatePassword(newPassword: string): Promise<void>;
+}
+
+export interface DemoProfile {
+  person: Person;
+  kind: 'admin' | 'responsavel' | 'funcionario' | 'sem_acesso';
+  /** Resumo textual dos vínculos, apenas para o seletor de demonstração. */
+  summary: string;
+  /** Sugestão do que testar com este perfil. */
+  hint: string;
+  activeLinks: number;
+}
+
+/** Utilidades que só existem no modo demo. O backend real NÃO as implementa. */
 export interface DemoControls {
+  listProfiles(): Promise<DemoProfile[]>;
   resetData(): Promise<void>;
   setSimulateFailure(enabled: boolean): void;
   isSimulatingFailure(): boolean;
@@ -131,5 +158,8 @@ export interface Services {
   team: TeamService;
   activity: ActivityService;
   overview: OverviewService;
-  demo: DemoControls;
+  /** Presente apenas no backend real. */
+  auth?: AuthService;
+  /** Presente apenas no modo demo. */
+  demo?: DemoControls;
 }

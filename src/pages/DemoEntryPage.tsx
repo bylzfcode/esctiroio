@@ -12,7 +12,7 @@ export default function DemoEntryPage() {
           <img src="/favicon.svg" alt="" className="h-10 w-10 rounded-xl" />
           <div>
             <h1 className="text-xl font-semibold text-ink">{APP_NAME}</h1>
-            <p className="text-sm text-mute">Etapa 1 · estrutura, navegação e acessos (demonstração)</p>
+            <p className="text-sm text-mute">Modo demonstração · dados fictícios, sem backend</p>
           </div>
         </div>
         <h2 className="mb-1 text-lg font-semibold text-ink">Escolha um perfil para explorar</h2>

@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
-// Roteiro de verificação dos fluxos (troca de loja, redirecionamento, permissões, equipe).
-// Uso: com `npm run dev` rodando, execute `node e2e/fluxos.cjs`.
+// Roteiro de verificação dos fluxos do MODO DEMONSTRAÇÃO (troca de loja, redirecionamento,
+// permissões, equipe, administração de contas).
+// Uso: com `npm run dev:demo` rodando, execute `node e2e/fluxos.cjs`.
 // Requer o pacote "playwright" instalado (npm i -D playwright && npx playwright install chromium).
 // Variáveis opcionais: E2E_URL (padrão http://127.0.0.1:5173) e E2E_SHOTS (pasta para salvar capturas de tela).
 const SHOTS = process.env.E2E_SHOTS || null;
@@ -54,11 +55,30 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  ok  ', msg); } el
   await page.keyboard.press('Escape');
   await navLink('Equipe e permissões').click();
   await page.getByText('Todas as contas e os seus vínculos').waitFor();
-  await page.getByText('Patrícia Gomes').waitFor();
-  ok(await page.getByText('Patrícia Gomes').count() > 0, 'consolidado lista todas as contas');
+  await page.locator('ul li', { hasText: 'Patrícia Gomes' }).first().waitFor();
+  ok(await page.locator('ul li', { hasText: 'Patrícia Gomes' }).first().count() > 0, 'consolidado lista todas as contas');
   await navLink('Histórico de atividades').click();
   await page.getByText('Alterações de acesso registradas em todas as lojas').waitFor();
   ok(await page.getByRole('combobox', { name: 'Filtrar por loja' }).count() === 1, 'histórico consolidado tem filtro de loja');
+
+  console.log('2b. Administração de contas (visão consolidada)');
+  await navLink('Equipe e permissões').click();
+  await page.locator('ul li', { hasText: 'Patrícia Gomes' }).first().waitFor();
+  await page.getByRole('button', { name: 'Remover administrador geral de Ana Ribeiro' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remover papel' }).click();
+  await page.getByText(/último administrador geral ativo/).first().waitFor();
+  ok(true, 'o último administrador geral não pode ser removido (erro explicado)');
+  await page.getByRole('button', { name: 'Desativar conta de Ana Ribeiro' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Desativar conta' }).click();
+  await page.waitForTimeout(500);
+  ok(await page.getByText('Conta desativada').count() === 0, 'o último administrador também não pode ser desativado');
+  await page.getByRole('button', { name: 'Desativar conta de Lucas Rocha' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Desativar conta' }).click();
+  await page.getByText('Conta desativada', { exact: true }).waitFor();
+  ok(true, 'conta de outra pessoa pode ser desativada (vínculos preservados)');
+  await page.getByRole('button', { name: 'Reativar conta de Lucas Rocha' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Reativar conta' }).click();
+  await page.getByRole('button', { name: 'Desativar conta de Lucas Rocha' }).waitFor();
 
   console.log('3. Carla: responsável na Beta, funcionária na Gama');
   await switchProfile('Carla Mendes');
@@ -70,7 +90,7 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  ok  ', msg); } el
   ok(betaNav.includes('Equipe e permissões'), `Beta (responsável): menu inclui Equipe (${betaNav.join(', ')})`);
   await navLink('Equipe e permissões').click();
   await page.getByRole('heading', { name: 'Equipe e permissões' }).waitFor();
-  await page.getByText('Lucas Rocha').waitFor();
+  await page.locator('ul li', { hasText: 'Lucas Rocha' }).first().waitFor();
   await chooseStore('Loja Gama');
   await page.waitForURL((u) => !u.pathname.includes('equipe'));
   ok(page.url().endsWith('/'), 'trocar para Gama (sem Equipe) redireciona para página autorizada');
@@ -113,12 +133,12 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  ok  ', msg); } el
   console.log('7. Bruno: gerenciar equipe da Loja Alfa');
   await pickProfile('Bruno Almeida');
   await navLink('Equipe e permissões').click();
-  await page.getByText('Igor Lima').waitFor();
+  await page.locator('ul li', { hasText: 'Igor Lima' }).first().waitFor();
   ok(await page.getByText('Gerido pela administração geral').count() >= 1, 'responsáveis (Helena) aparecem bloqueados para edição');
   ok(await page.getByText('Seu vínculo').count() === 1, 'próprio vínculo bloqueado');
-  ok(await page.getByText('Marcos Teixeira').count() === 0, 'inativos ocultos por padrão');
+  ok(await page.locator('ul li', { hasText: 'Marcos Teixeira' }).first().count() === 0, 'inativos ocultos por padrão');
   await page.getByRole('button', { name: /^Inativos/ }).click();
-  await page.getByText('Marcos Teixeira').waitFor();
+  await page.locator('ul li', { hasText: 'Marcos Teixeira' }).first().waitFor();
   ok(true, 'filtro Inativos mostra Marcos');
   await page.getByRole('button', { name: /^Ativos/ }).click();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/05-equipe-bruno.png` });
@@ -128,9 +148,10 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  ok  ', msg); } el
   const dlg = page.getByRole('dialog');
   await dlg.getByLabel(/^E-mail/).fill('lucas@demo.example');
   await dlg.getByLabel(/^E-mail/).blur();
-  await dlg.getByText(/Conta existente de/).waitFor();
-  ok(await dlg.getByText('Lucas Rocha').count() > 0, 'e-mail existente reaproveita a conta (separação conta x vínculo)');
-  ok(await dlg.getByLabel('Nome completo').count() === 0, 'campo de nome não aparece para conta existente');
+  await page.waitForTimeout(400);
+  ok(await dlg.getByText(/Conta existente de/).count() === 0 && await dlg.getByText('Lucas Rocha').count() === 0, 'digitar um e-mail NÃO revela se a conta existe');
+  ok(await dlg.getByLabel(/^Nome completo/).count() === 1, 'nome sempre exigido (mesmo formulário para conta nova e existente)');
+  await dlg.getByLabel(/^Nome completo/).fill('Qualquer Nome');
   // matriz: visualizar bloqueia ações
   const calView = dlg.getByRole('checkbox', { name: 'Calendário: Visualizar' });
   const calEdit = dlg.getByRole('checkbox', { name: 'Calendário: Editar' });
@@ -146,21 +167,22 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  ok  ', msg); } el
   await calEdit.check();
   await dlg.getByLabel('Cargo ou função').fill('Apoio');
   await dlg.getByRole('button', { name: 'Cadastrar' }).click();
-  await page.getByText(/foi vinculado\(a\) à Loja Alfa/).waitFor();
-  ok(await page.getByText('Lucas Rocha').count() > 0, 'Lucas aparece na lista da Alfa após o cadastro');
+  await page.getByText(/Vínculo com a Loja Alfa criado/).waitFor();
+  await page.locator('ul li', { hasText: 'Lucas Rocha' }).first().waitFor();
+  ok(true, 'Lucas aparece na lista da Alfa após o cadastro');
 
   // cadastro: conta nova
   await page.getByRole('button', { name: 'Novo funcionário' }).click();
   await dlg.getByLabel(/^E-mail/).fill('nova.pessoa@demo.example');
   await dlg.getByLabel(/^E-mail/).blur();
-  await dlg.getByLabel('Nome completo').waitFor();
   await dlg.getByRole('button', { name: 'Cadastrar' }).click();
   await dlg.getByText('Informe o nome da pessoa.').first().waitFor();
   ok(true, 'validação: nome obrigatório para conta nova');
-  await dlg.getByLabel('Nome completo').fill('Nova Pessoa');
+  await dlg.getByLabel(/^Nome completo/).fill('Nova Pessoa');
   await dlg.getByRole('button', { name: 'Cadastrar' }).click();
-  await page.getByText(/Cadastro concluído/).waitFor();
-  ok(await page.getByText('Nova Pessoa').count() > 0, 'conta nova criada e vinculada');
+  await page.getByText(/Vínculo com a Loja Alfa criado/).first().waitFor();
+  await page.locator('ul li', { hasText: 'Nova Pessoa' }).first().waitFor();
+  ok(true, 'conta nova criada e vinculada');
 
   // edição
   await page.getByRole('button', { name: 'Editar Júlia Nunes' }).click();
@@ -231,7 +253,7 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  ok  ', msg); } el
   await mp.locator('nav[aria-label="Principal"]').getByRole('link', { name: 'Equipe e permissões' }).waitFor();
   if (SHOTS) await mp.screenshot({ path: `${SHOTS}/11-mobile-menu.png` });
   await mp.locator('nav[aria-label="Principal"]').getByRole('link', { name: 'Equipe e permissões' }).click();
-  await mp.getByText('Lucas Rocha').waitFor();
+  await mp.locator('ul li', { hasText: 'Lucas Rocha' }).first().waitFor();
   const overflow = await mp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   ok(!overflow, 'sem rolagem horizontal da página no celular');
   if (SHOTS) await mp.screenshot({ path: `${SHOTS}/12-mobile-equipe.png` });

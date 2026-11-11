@@ -38,24 +38,28 @@ beforeEach(make);
 
 describe('cadastro de funcionários', () => {
   it('cria conta nova e vínculo, registrando o histórico', async () => {
-    const m = await svc.team.createMember(bruno, 'loja-alfa', {
+    await svc.team.createMember(bruno, 'loja-alfa', {
       email: 'Nova.Pessoa@demo.example',
       name: 'Nova Pessoa',
       jobTitle: 'Caixa',
       role: 'funcionario',
       permissions: { overview: ['view'], calendar: ['view'] },
     });
-    expect(m.active).toBe(true);
+    const rows = await svc.team.listStoreMembers(bruno, 'loja-alfa');
+    expect(rows.find((r) => r.person.email === 'nova.pessoa@demo.example')?.membership.active).toBe(true);
     const log = await svc.activity.list(bruno, { storeId: 'loja-alfa' });
-    expect(log.map((l) => l.type)).toEqual(expect.arrayContaining(['conta_criada', 'vinculo_criado']));
+    expect(log.map((l) => l.type)).toContain('vinculo_criado');
+    // Criação de conta é evento global (sem loja): só o administrador geral o vê, como no servidor.
+    expect(log.map((l) => l.type)).not.toContain('conta_criada');
+    const all = await svc.activity.list(ana, { storeId: null });
+    expect(all.find((l) => l.type === 'conta_criada')).toMatchObject({ storeId: null });
     expect(storage.map.has(DATA_KEY)).toBe(true);
   });
 
   it('reaproveita a conta existente em vez de duplicar (conta separada do vínculo)', async () => {
-    const lookup = await svc.team.lookupAccount(bruno, 'loja-alfa', 'LUCAS@demo.example');
-    expect(lookup).toMatchObject({ exists: true, name: 'Lucas Rocha' });
     await svc.team.createMember(bruno, 'loja-alfa', {
-      email: 'lucas@demo.example',
+      email: 'LUCAS@demo.example',
+      name: 'Nome ignorado: a conta já existe',
       jobTitle: '',
       role: 'funcionario',
       permissions: { overview: ['view'] },
@@ -63,14 +67,15 @@ describe('cadastro de funcionários', () => {
     const people = await svc.team.listAllPeople(ana);
     expect(people.filter((p) => p.person.email === 'lucas@demo.example')).toHaveLength(1);
     expect(people.find((p) => p.person.id === 'p-lucas')!.links.filter((l) => l.membership.active)).toHaveLength(2);
+    expect(people.find((p) => p.person.id === 'p-lucas')!.person.name).toBe('Lucas Rocha'); // conta intacta
   });
 
   it('rejeita e-mail inválido, vínculo duplicado e administrador geral', async () => {
-    const base = { jobTitle: '', role: 'funcionario' as const, permissions: { overview: ['view' as const] } };
+    const base = { name: 'Pessoa Teste', jobTitle: '', role: 'funcionario' as const, permissions: { overview: ['view' as const] } };
     expect((await fail(svc.team.createMember(bruno, 'loja-alfa', { ...base, email: 'x', name: 'X' }))).fieldErrors?.email).toBeTruthy();
     expect((await fail(svc.team.createMember(bruno, 'loja-alfa', { ...base, email: 'igor@demo.example' }))).fieldErrors?.email).toMatch(/já está vinculada/);
     expect((await fail(svc.team.createMember(bruno, 'loja-alfa', { ...base, email: 'marcos@demo.example' }))).fieldErrors?.email).toMatch(/desativado/);
-    expect((await fail(svc.team.createMember(bruno, 'loja-alfa', { ...base, email: 'ana@demo.example' }))).fieldErrors?.email).toMatch(/Administradores gerais/);
+    expect((await fail(svc.team.createMember(bruno, 'loja-alfa', { ...base, email: 'ana@demo.example' }))).fieldErrors?.email).toBe('Este e-mail não pode ser vinculado a esta loja.');
   });
 
   it('exige ao menos um módulo visível', async () => {
@@ -91,8 +96,9 @@ describe('limites do responsável', () => {
   it('não cria responsável nem administrador; administrador geral pode criar responsável', async () => {
     const input = { email: 'r@demo.example', name: 'Resp Nova', jobTitle: '', role: 'responsavel' as const, permissions: { overview: ['view' as const] } };
     expect((await fail(svc.team.createMember(bruno, 'loja-alfa', input))).code).toBe('forbidden');
-    const m = await svc.team.createMember(ana, 'loja-alfa', input);
-    expect(m.role).toBe('responsavel');
+    await svc.team.createMember(ana, 'loja-alfa', input);
+    const rows = await svc.team.listStoreMembers(ana, 'loja-alfa');
+    expect(rows.find((r) => r.person.email === 'r@demo.example')?.membership.role).toBe('responsavel');
   });
 
   it('não altera nem desativa outro responsável, nem o próprio vínculo', async () => {
@@ -146,7 +152,9 @@ describe('limites do responsável', () => {
     const fabio = { personId: 'p-fabio' };
     expect((await svc.team.listStoreMembers(fabio, 'loja-delta')).length).toBeGreaterThan(0);
     expect((await fail(svc.team.setMemberActive(fabio, 'v-marcos-delta', false))).code).toBe('forbidden');
-    expect((await fail(svc.team.lookupAccount(fabio, 'loja-delta', 'x@demo.example'))).code).toBe('forbidden');
+    expect(
+      (await fail(svc.team.createMember(fabio, 'loja-delta', { email: 'x@demo.example', name: 'X Y', jobTitle: '', role: 'funcionario', permissions: { overview: ['view'] } }))).code,
+    ).toBe('forbidden');
   });
 
   it('não acessa lojas sem vínculo', async () => {
@@ -200,23 +208,53 @@ describe('persistência e simulações', () => {
 
   it('restaura os dados de demonstração e simula falha de carregamento', async () => {
     await svc.team.setMemberActive(bruno, 'v-igor-alfa', false);
-    await svc.demo.resetData();
+    await svc.demo!.resetData();
     expect((await svc.session.loadSnapshot(igor)).stores).toHaveLength(2);
-    svc.demo.setSimulateFailure(true);
+    svc.demo!.setSimulateFailure(true);
     expect((await fail(svc.team.listStoreMembers(bruno, 'loja-alfa'))).code).toBe('unavailable');
-    svc.demo.setSimulateFailure(false);
+    svc.demo!.setSimulateFailure(false);
     expect(await svc.team.listStoreMembers(bruno, 'loja-alfa')).not.toHaveLength(0);
   });
 
   it('dados corrompidos no storage voltam ao padrão', async () => {
     storage.map.set(DATA_KEY, '{quebrado');
     const s = createMockServices({ storage, latencyMs: [0, 0] });
-    expect((await s.session.listDemoProfiles()).length).toBeGreaterThan(5);
+    expect((await s.demo!.listProfiles()).length).toBeGreaterThan(5);
   });
 
   it('perfis de demonstração: todos os tipos presentes e sem vínculos para Patrícia', async () => {
-    const profiles = await svc.session.listDemoProfiles();
+    const profiles = await svc.demo!.listProfiles();
     expect(new Set(profiles.map((p) => p.kind))).toEqual(new Set(['admin', 'responsavel', 'funcionario', 'sem_acesso']));
     expect(profiles.find((p) => p.person.id === 'p-patricia')!.activeLinks).toBe(0);
+  });
+});
+
+describe('administração de contas (modo demonstração, espelha o servidor)', () => {
+  it('somente o administrador geral concede/remove o papel e desativa contas', async () => {
+    for (const a of [bruno, carla, igor]) {
+      expect((await fail(svc.team.setGeneralAdmin(a, 'p-lucas', true))).code).toBe('forbidden');
+      expect((await fail(svc.team.setAccountActive(a, 'p-lucas', false))).code).toBe('forbidden');
+    }
+    await svc.team.setGeneralAdmin(ana, 'p-lucas', true);
+    expect((await svc.session.loadSnapshot({ personId: 'p-lucas' })).stores).toHaveLength(4);
+  });
+
+  it('o último administrador geral ativo não pode ser removido nem desativado', async () => {
+    expect((await fail(svc.team.setGeneralAdmin(ana, 'p-ana', false))).code).toBe('conflict');
+    expect((await fail(svc.team.setAccountActive(ana, 'p-ana', false))).code).toBe('conflict');
+    await svc.team.setGeneralAdmin(ana, 'p-lucas', true); // surge um segundo administrador
+    await svc.team.setGeneralAdmin(ana, 'p-ana', false); // agora é possível
+  });
+
+  it('conta desativada: sem acesso a lojas, mas vínculos e histórico ficam; reativar restaura', async () => {
+    await svc.team.setAccountActive(ana, 'p-igor', false);
+    const people = await svc.team.listAllPeople(ana);
+    const igorRow = people.find((p) => p.person.id === 'p-igor')!;
+    expect(igorRow.person.active).toBe(false);
+    expect(igorRow.links.filter((l) => l.membership.active)).toHaveLength(2); // vínculos preservados
+    const log = await svc.activity.list(ana, { storeId: null });
+    expect(log[0]).toMatchObject({ type: 'conta_desativada', storeId: null });
+    await svc.team.setAccountActive(ana, 'p-igor', true);
+    expect((await svc.team.listAllPeople(ana)).find((p) => p.person.id === 'p-igor')!.person.active).toBe(true);
   });
 });

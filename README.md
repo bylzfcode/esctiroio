@@ -1,121 +1,130 @@
-# Painel de Lojas — etapa 1
+# Painel de Lojas
 
-Primeira etapa de um sistema administrativo para quatro ou mais lojas: **estrutura visual, navegação e modelo de acessos**. O financeiro e o calendário serão desenvolvidos depois.
+Sistema administrativo para quatro ou mais lojas: **autenticação, lojas, equipe, permissões e auditoria**.
+Financeiro e calendário ainda não existem (apenas estados vazios).
 
-> **Isto é uma demonstração.** Não há backend, login nem dados reais. A escolha de perfil na tela inicial **não é autenticação** e as verificações de permissão feitas no navegador **não são segurança de produção**.
+O app tem **dois modos, sempre explícitos e separados**:
+
+| Modo | Como ligar | O que é |
+| --- | --- | --- |
+| **Real** (padrão) | `npm run dev` / `npm run build` | Supabase Auth + PostgreSQL com RLS. Login por e-mail e senha, convite, recuperação de senha. **Exige configuração**; sem ela o app mostra uma orientação e **nunca** cai no mock. |
+| **Demonstração** | `npm run dev:demo` / `npm run build:demo` | Dados fictícios no navegador, sem backend e **sem login real** (seletor de perfis). Faixa amarela permanente. O build de produção normal não contém esse código nem os dados. |
+
+> Segurança: o que cada pessoa pode ver ou fazer é decidido **no servidor** (RLS + funções do banco).
+> Esconder menus no navegador é só conveniência. Detalhes e verificações em [`docs/BACKEND.md`](docs/BACKEND.md).
 
 ## Tecnologias
 
-React 19, TypeScript, Vite, Tailwind CSS 3, React Router e Lucide (ícones). Testes unitários com Vitest.
+React 19, TypeScript, Vite, Tailwind CSS 3, React Router, Lucide · Supabase (Auth, PostgreSQL, Edge Functions) · Vitest.
 
 ## Como executar
 
-Requer Node.js 20.19 ou superior (ou 22.12+).
+Requer Node.js 20.19+ (ou 22.12+).
 
 ```bash
 npm install
-npm run dev
 ```
 
-Abra o endereço mostrado no terminal (normalmente http://localhost:5173).
+**Demonstração (sem nada configurado):**
+
+```bash
+npm run dev:demo
+```
+
+**Backend real:** crie `.env.local` a partir de `.env.example` com a URL e a chave **pública** do projeto
+Supabase e rode `npm run dev`. O passo a passo completo (Supabase local ou hospedado, Edge Function,
+**criação segura do primeiro administrador**) está em [`docs/BACKEND.md`](docs/BACKEND.md).
 
 Outros comandos:
 
 ```bash
-npm run build       # TypeScript + build de produção (pasta dist/, não publicada)
-npm run typecheck   # só a checagem de tipos
-npm test            # testes das regras de acesso e dos serviços
+npm run build         # tipos + build de produção (backend real; não publica nada)
+npm run build:demo    # build do modo demonstração
+npm run typecheck     # app, ferramentas e testes/servidor
+npm test              # testes (inclui SQL/RLS num Postgres embutido, sem instalar nada)
+npm run dev:seed      # contas fictícias no Supabase LOCAL (recusa qualquer URL que não seja localhost)
 ```
 
-Não são necessárias variáveis de ambiente. Veja `.env.example`.
+Teste de banco em um PostgreSQL real (inclui o teste de concorrência), com um banco **descartável**:
 
-## Como testar os perfis e a troca de loja
+```bash
+TEST_DATABASE_URL=postgres://usuario:senha@127.0.0.1:5432/postgres npm test
+```
 
-Ao abrir o app você escolhe um perfil fictício. Troque de perfil a qualquer momento em **menu do usuário → Trocar perfil de demonstração** (ou no botão da faixa amarela).
-
-| Perfil | O que observar |
-| --- | --- |
-| **Ana Ribeiro** (administradora geral) | Seletor com **Visão consolidada** + 4 lojas. É a única que vê a visão consolidada. Pode cadastrar responsáveis e alterar qualquer vínculo. |
-| **Bruno Almeida** (responsável na Alfa) | Gerencia os funcionários da Alfa. Helena (outra responsável) e o próprio vínculo aparecem bloqueados. |
-| **Diego Faria** (responsável na Gama e na Delta) | Duas lojas no seletor, ambas com gestão de equipe. |
-| **Carla Mendes** (responsável na Beta, funcionária na Gama) | Na Beta o menu tem Equipe e permissões; ao trocar para a Gama o menu cai para Visão geral e Calendário. Estando em `/equipe` e trocando para a Gama, você é **redirecionada** com um aviso. |
-| **Igor Lima** (funcionário na Alfa e na Beta) | Permissões diferentes por loja: Calendário existe na Alfa e não na Beta. |
-| **Marcos Teixeira** | Vínculo **desativado** na Alfa: só a Delta aparece. |
-| **Fábio Santos** | Funcionário que pode apenas consultar a equipe (sem botões de edição). |
-| **Patrícia Gomes** | Todos os vínculos desativados: tela de "sem acesso". |
-
-Fluxos sugeridos em **Equipe e permissões** (como Bruno ou Ana, em uma loja):
-
-1. **Novo funcionário** com `lucas@demo.example`: a conta existente é reaproveitada e só o vínculo com a loja é criado.
-2. Na matriz de permissões, desmarque **Visualizar**: as demais ações do módulo são limpas e bloqueadas.
-3. **Editar** um funcionário e salvar; **Desativar** com confirmação e depois **Reativar** (filtro "Inativos").
-4. Abra **Histórico de atividades** para ver os registros locais. Depois entre como a pessoa afetada para ver o efeito no seletor de lojas.
-
-Em **Configurações** há duas ferramentas só da demonstração: simular falha de carregamento (para ver o estado de erro) e restaurar os dados iniciais.
+Cada arquivo de teste cria e remove o seu próprio banco temporário.
 
 ## Modelo de acessos
 
-- **Conta** (`Person`) e **vínculo** (`Membership`) são entidades separadas. Uma conta tem vários vínculos; cada vínculo tem perfil, cargo, permissões e situação **próprios da loja**.
-- Perfis: **Administrador geral** (todas as lojas e visão consolidada), **Responsável** (administra a loja e seus funcionários) e **Funcionário** (só o que foi liberado).
-- Permissões por módulo: visualizar, criar, editar, excluir, exportar. Sem "visualizar" não há nenhuma outra ação.
-- Responsáveis **não** podem: criar administradores gerais, cadastrar/alterar/desativar outros responsáveis, alterar o próprio vínculo nem conceder (ou retirar) permissões que eles mesmos não possuem.
-- Funcionários nunca recebem ações administrativas em "Equipe e permissões" (apenas visualizar); gerir equipe exige perfil de responsável.
-- Desativar um vínculo muda só aquele vínculo: a conta, os outros vínculos e o histórico permanecem. O vínculo pode ser reativado com as mesmas permissões.
-- O seletor de lojas mostra só lojas com vínculo ativo. Ao trocar de loja, menu e permissões são recalculados; se a página atual não for permitida, há redirecionamento para a primeira página autorizada.
+- **Conta** (`profiles`) e **vínculo com a loja** (`memberships`) são entidades separadas. Uma conta tem
+  vários vínculos; cada um tem perfil, cargo, permissões e situação **próprios da loja**.
+- Perfis: **Administrador geral** (todas as lojas e visão consolidada), **Responsável** (administra a loja e
+  seus funcionários; pode haver vários) e **Funcionário** (só o que foi liberado).
+- Permissões por módulo: visualizar, criar, editar, excluir, exportar. Sem "visualizar" não há outras ações.
+- **Somente o administrador geral** concede ou remove os papéis de responsável e de administrador geral.
+- Responsáveis gerenciam apenas funcionários das lojas que administram; não alteram outros responsáveis nem o
+  próprio vínculo; **ninguém concede permissões que não possui**.
+- O **último administrador geral ativo** não pode ser removido nem desativado.
+- Desativar um vínculo corta **imediatamente** o acesso àquela loja e preserva a conta, os outros vínculos e o histórico.
+- Cadastro de funcionário **por convite**: se o e-mail já tem conta, a identidade é reaproveitada e só o vínculo é
+  criado — e a resposta é a mesma nos dois casos (não revela quem tem conta).
+- Toda alteração é auditada (quem, quando, loja, o quê); o histórico é somente de acréscimo.
 
-As regras estão em `src/domain` (funções puras) e são reaplicadas na camada de serviços.
+## Verificações
 
-## O que é fictício
+| | Resultado |
+| --- | --- |
+| Tipos (`tsc -b`) | app, ferramentas e testes/servidor sem erros |
+| Build (`npm run build`, `build:demo`) | ok |
+| `npm test` (PGlite) | 142 passam, 7 pulados* |
+| `TEST_DATABASE_URL=… npm test` (PostgreSQL 16 real) | 143 passam, 6 pulados* |
+| Roteiros de navegador (Playwright) | modo demonstração 46/46; interface do modo real 29/29 (contra servidor **falso**) |
 
-- **Tudo.** Lojas (Alfa, Beta, Gama, Delta), pessoas, e-mails (domínio reservado `demo.example`), vínculos, permissões e o histórico inicial estão em `src/services/mock/seed.ts`.
-- Alterações feitas na demonstração ficam no `localStorage` do navegador (chave `esctiroio.demo.dados.v1`) e podem ser apagadas em Configurações → Restaurar.
-- O atraso de rede é simulado para exercitar os estados de carregamento.
+\* Pulados: 6 testes de integração (`tests/live`) que exigem a pilha Supabase em execução e, no PGlite, o teste de concorrência.
 
-## O que ainda não existe
+**Não executado aqui (depende de configuração externa):** Auth real (GoTrue) e envio de e-mails, PostgREST real,
+Edge Function no runtime Deno, `supabase/config.toml` com a CLI e o painel hospedado. A lista completa, com
+como verificar cada item, está em [`docs/BACKEND.md`](docs/BACKEND.md#o-que-foi-verificado-e-o-que-não-foi).
 
-- Autenticação, senhas, recuperação de conta e sessões reais.
-- Backend, banco de dados e autorização no servidor.
-- **Financeiro** e **Calendário**: apenas estados vazios explicativos. As permissões desses módulos já podem ser configuradas, mas não há ações para executar.
-- Exportação (a permissão existe no modelo; não há exportação implementada).
-- Convite por e-mail, edição dos dados da própria conta pelo usuário, criação de novas lojas e de administradores gerais.
-- Testes automatizados de interface no CI (há um roteiro manual em `e2e/`).
+## Modo demonstração
 
-Fora do escopo desta etapa e não implementado: catálogo comercial, vitrine, pedidos e automação de vendas.
+Dados **fictícios** (lojas Alfa, Beta, Gama, Delta; e-mails `demo.example`) em `src/services/mock/seed.ts`,
+guardados no `localStorage`. Perfis para explorar:
 
-## Organização do código
+| Perfil | O que observar |
+| --- | --- |
+| **Ana Ribeiro** (administradora geral) | Visão consolidada + 4 lojas; concede/remove administrador e desativa contas (o último administrador é protegido). |
+| **Bruno Almeida** (responsável na Alfa) | Gerencia funcionários; outro responsável e o próprio vínculo aparecem bloqueados. |
+| **Carla Mendes** (responsável na Beta, funcionária na Gama) | O menu muda ao trocar de loja; em `/equipe`, ir para a Gama redireciona com aviso. |
+| **Igor Lima** | Permissões diferentes por loja. |
+| **Marcos Teixeira** | Vínculo desativado na Alfa: só a Delta aparece. |
+| **Patrícia Gomes** | Todos os vínculos desativados: sem acesso. |
+
+Nada disso é autenticação, e as verificações do modo demonstração rodam no navegador.
+
+## Organização
 
 ```
 src/
-  domain/      tipos, módulos/ações e regras de acesso e permissões (puras, testadas)
-  services/    contratos (types.ts) e implementação fictícia (mock/)
-  context/     tema, avisos (toasts) e sessão de demonstração
-  hooks/       useAsync (carregamento/erro/recarregar)
-  components/  ui/ (primitivos), layout/ (menu, cabeçalho, seletor de loja), team/
-  pages/       Visão geral, Financeiro, Equipe, Calendário, Histórico, Configurações
-  app/         configuração de navegação
-e2e/           roteiro opcional de verificação no navegador (Playwright)
+  config/      escolha explícita do modo e validação do ambiente (rejeita chave privilegiada)
+  domain/      tipos e regras de acesso/permissões (puras)
+  services/    contratos (types.ts) + supabase/ (real) + mock/ (demonstração)
+  context/     tema, avisos, autenticação e sessão
+  components/  ui/, layout/, team/
+  pages/       Visão geral, Financeiro, Equipe, Calendário, Histórico, Configurações, Entrar, Definir senha
+supabase/
+  migrations/  esquema, RLS, gatilhos, auditoria, RPC, bootstrap do 1º administrador
+  functions/   Edge Function de convite (única que usa a chave de serviço)
+  seed.sql     lojas fictícias SÓ para desenvolvimento local
+tests/         db/ (SQL/RLS), live/ (pilha real, opcional), static/ (segredos)
+e2e/           roteiros Playwright opcionais (demo e interface do modo real)
+docs/BACKEND.md
 ```
 
-### Trocando o mock por um backend
+## O que ainda não existe
 
-A interface só usa o contrato `Services` (`src/services/types.ts`). Para integrar:
+- Financeiro, calendário e exportação (as permissões existem; não há ações).
+- Telas para criar/editar lojas, reenviar convites e exportar auditoria.
+- MFA e política de cabeçalhos HTTP (CSP) no repositório (dependem do host).
+- Execução automatizada em CI e a validação contra o Supabase em execução (veja `docs/BACKEND.md`).
 
-1. Crie uma implementação de `Services` que chame a API (por exemplo com `fetch`).
-2. Troque `createMockServices()` em `src/services/index.ts`.
-3. Substitua o seletor de perfil por autenticação real e entregue `SessionSnapshot` a partir da sessão autenticada.
-4. Reaplique **no servidor** todas as regras de `src/domain/access.ts` e `src/services/mock/backend.ts` (autorização por loja, limites do responsável, concessão de permissões).
-
-Não coloque segredos em variáveis `VITE_*`: elas vão para o navegador.
-
-## Verificação sem navegador
-
-`npm test` cobre: normalização e limites de permissões, escopo de lojas por perfil, visão consolidada exclusiva, regras do responsável, cadastro com reaproveitamento de conta, desativação/reativação, persistência e registro de histórico.
-
-## Roteiro no navegador (opcional)
-
-Com `npm run dev` rodando e o Playwright instalado:
-
-```bash
-npm i -D playwright && npx playwright install chromium
-node e2e/fluxos.cjs
-```
+Fora de escopo e não implementado: catálogo comercial, vitrine, pedidos e automação de vendas.

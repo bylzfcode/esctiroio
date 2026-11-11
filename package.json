@@ -2,27 +2,35 @@
   "name": "esctiroio",
   "private": true,
   "version": "0.1.0",
-  "description": "Painel administrativo multiloja - etapa 1: estrutura, navegação e acessos (demonstração)",
+  "description": "Painel administrativo multiloja - etapa 2: backend e autenticação reais (Supabase) + modo demonstração",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:demo": "vite --mode demo",
+    "build:demo": "tsc -b && vite build --mode demo",
+    "test:pg": "TEST_DATABASE_URL=${TEST_DATABASE_URL:?defina TEST_DATABASE_URL (Postgres de teste)} vitest run tests/db",
+    "dev:seed": "node scripts/dev-seed.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.71.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-router-dom": "^7.18.5"
+    "react-router-dom": "^7.18.5",
+    "@supabase/supabase-js": "^2.119.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "autoprefixer": "^10.6.2",
+    "pg": "^8.23.1",
     "postcss": "^8.5.32",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.9.3",

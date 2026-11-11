@@ -15,7 +15,6 @@ import { ROLE_LABEL } from '@/domain/modules';
 import type { ActivityEntry, ActivityType, Membership, Person, Store } from '@/domain/types';
 import { ServiceError } from '../errors';
 import type {
-  AccountLookup,
   Actor,
   ConsolidatedSummary,
   DemoProfile,
@@ -135,18 +134,18 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
   }
 
   function log(
-    storeId: string,
+    storeId: string | null,
     actor: Person,
     type: ActivityType,
     target: Person,
     summary: string,
   ) {
-    const store = data.stores.find((s) => s.id === storeId);
+    const store = storeId ? data.stores.find((s) => s.id === storeId) : undefined;
     const entry: ActivityEntry = {
       id: uid('a'),
       at: now().toISOString(),
       storeId,
-      storeName: store?.name ?? storeId,
+      storeName: store?.name ?? null,
       actorId: actor.id,
       actorName: actor.name,
       type,
@@ -176,24 +175,6 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
   // ----- serviços -----
 
   const session: Services['session'] = {
-    async listDemoProfiles() {
-      await begin();
-      const profiles: DemoProfile[] = data.persons.map((person) => {
-        const links = data.memberships.filter((m) => m.personId === person.id && m.active);
-        let kind: DemoProfile['kind'] = 'sem_acesso';
-        if (person.isGeneralAdmin) kind = 'admin';
-        else if (links.some((l) => l.role === 'responsavel')) kind = 'responsavel';
-        else if (links.length) kind = 'funcionario';
-        const summary = person.isGeneralAdmin
-          ? 'Administrador geral · todas as lojas'
-          : links.length
-            ? links.map((l) => `${ROLE_LABEL[l.role]} · ${storeName(l.storeId)}`).join(' | ')
-            : 'Sem vínculos ativos';
-        return { person, kind, summary, hint: PROFILE_HINTS[person.id] ?? '', activeLinks: links.length };
-      });
-      return clone(profiles);
-    },
-
     async loadSnapshot(actor): Promise<SessionSnapshot> {
       await begin();
       const person = actorPerson(actor);
@@ -244,22 +225,7 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
       );
     },
 
-    async lookupAccount(actor, storeId, email): Promise<AccountLookup> {
-      await begin();
-      const { access } = storeAccess(actor, storeId);
-      if (!canManageTeam(access, 'create')) throw new ServiceError('forbidden', 'Você não pode cadastrar pessoas nesta loja.');
-      const found = data.persons.find((p) => normEmail(p.email) === normEmail(email));
-      if (!found) return { exists: false };
-      const link = data.memberships.find((m) => m.personId === found.id && m.storeId === storeId);
-      return {
-        exists: true,
-        name: found.name,
-        isGeneralAdmin: found.isGeneralAdmin,
-        linkStatus: link ? (link.active ? 'ativo' : 'inativo') : undefined,
-      };
-    },
-
-    async createMember(actor, storeId, input: MemberInput): Promise<Membership> {
+    async createMember(actor, storeId, input: MemberInput): Promise<void> {
       await begin();
       const { person: actorP, access, store } = storeAccess(actor, storeId);
       if (!canManageTeam(access, 'create')) {
@@ -276,12 +242,14 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
 
       const existing = data.persons.find((p) => normEmail(p.email) === email);
       if (existing?.isGeneralAdmin) {
-        errors.email = 'Administradores gerais já acessam todas as lojas e não precisam de vínculo.';
+        // Mensagem genérica: não revela que o e-mail pertence a um administrador (igual ao servidor).
+        errors.email = 'Este e-mail não pode ser vinculado a esta loja.';
       }
       const link = existing && data.memberships.find((m) => m.personId === existing.id && m.storeId === storeId);
       if (link?.active) errors.email = 'Esta pessoa já está vinculada à loja.';
       else if (link) errors.email = 'Esta pessoa tem um vínculo desativado nesta loja. Reative-o na lista de inativos.';
-      if (!existing && (input.name ?? '').trim().length < 2) errors.name = 'Informe o nome da pessoa.';
+      // Nome sempre exigido: se só fosse para contas novas, a validação revelaria quais e-mails existem.
+      if ((input.name ?? '').trim().length < 2) errors.name = 'Informe o nome da pessoa.';
 
       const permissions = normalizePermissions(input.permissions, input.role);
       if (!Object.keys(permissions).length) {
@@ -294,9 +262,9 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
       const stamp = now().toISOString();
       let target = existing;
       if (!target) {
-        target = { id: uid('p'), name: (input.name ?? '').trim(), email, isGeneralAdmin: false, createdAt: stamp };
+        target = { id: uid('p'), name: (input.name ?? '').trim(), email, isGeneralAdmin: false, createdAt: stamp, active: true };
         data.persons.push(target);
-        log(storeId, actorP, 'conta_criada', target, `Conta de ${target.name} criada durante o cadastro na ${store.name}.`);
+        log(null, actorP, 'conta_criada', target, `Conta de ${target.name} criada.`);
       }
       const membership: Membership = {
         id: uid('v'),
@@ -319,10 +287,9 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
         `Vínculo de ${target.name} com a ${store.name} criado como ${ROLE_LABEL[input.role].toLowerCase()}${cargo}.`,
       );
       save();
-      return clone(membership);
     },
 
-    async updateMember(actor, membershipId, input: MemberUpdate): Promise<Membership> {
+    async updateMember(actor, membershipId, input: MemberUpdate): Promise<void> {
       await begin();
       const target = data.memberships.find((m) => m.id === membershipId);
       if (!target) throw new ServiceError('not_found', 'Vínculo não encontrado.');
@@ -363,7 +330,7 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
       const previousName = person.name;
       if (newName && newName !== previousName) {
         person.name = newName;
-        profileChanges.push(`nome da conta alterado de ${previousName} para ${newName}`);
+        log(null, actorP, 'conta_editada', person, `Nome da conta alterado de ${previousName} para ${newName}.`);
       }
 
       target.jobTitle = jobTitle;
@@ -377,17 +344,16 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
       if (changes.length) {
         log(target.storeId, actorP, 'permissoes_alteradas', person, changes.map(describeChange).join('; ') + '.');
       }
-      if (profileChanges.length || changes.length) save();
-      return clone(target);
+      save();
     },
 
-    async setMemberActive(actor, membershipId, active): Promise<Membership> {
+    async setMemberActive(actor, membershipId, active): Promise<void> {
       await begin();
       const target = data.memberships.find((m) => m.id === membershipId);
       if (!target) throw new ServiceError('not_found', 'Vínculo não encontrado.');
       const { person: actorP, access, store } = storeAccess(actor, target.storeId);
       assertCanActOn(access, actorP, target, active ? 'edit' : 'delete');
-      if (target.active === active) return clone(target);
+      if (target.active === active) return;
 
       const person = data.persons.find((p) => p.id === target.personId)!;
       target.active = active;
@@ -401,9 +367,46 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
         `Vínculo de ${person.name} com a ${store.name} ${active ? 'reativado' : 'desativado'}.`,
       );
       save();
-      return clone(target);
+    },
+
+    async setGeneralAdmin(actor, personId, value): Promise<void> {
+      await begin();
+      const actorP = requireAdmin(actor);
+      const target = data.persons.find((p) => p.id === personId);
+      if (!target) throw new ServiceError('not_found', 'Conta não encontrada.');
+      if (value && target.active === false) {
+        throw new ServiceError('validation', 'A conta precisa estar ativa para receber o papel de administrador geral.');
+      }
+      if (!value) assertNotLastAdmin(target);
+      if (target.isGeneralAdmin === value) return;
+      target.isGeneralAdmin = value;
+      log(null, actorP, value ? 'admin_concedido' : 'admin_removido', target,
+        `Papel de administrador geral ${value ? 'concedido a' : 'removido de'} ${target.name}.`);
+      save();
+    },
+
+    async setAccountActive(actor, personId, active): Promise<void> {
+      await begin();
+      const actorP = requireAdmin(actor);
+      const target = data.persons.find((p) => p.id === personId);
+      if (!target) throw new ServiceError('not_found', 'Conta não encontrada.');
+      if (!active) assertNotLastAdmin(target);
+      if ((target.active !== false) === active) return;
+      target.active = active;
+      log(null, actorP, active ? 'conta_reativada' : 'conta_desativada', target,
+        `Conta de ${target.name} ${active ? 'reativada' : 'desativada'}.`);
+      save();
     },
   };
+
+  /** Espelha o gatilho do banco: nunca remover/desativar o último administrador geral ativo. */
+  function assertNotLastAdmin(target: Person) {
+    if (!target.isGeneralAdmin || target.active === false) return;
+    const others = data.persons.filter((p) => p.id !== target.id && p.isGeneralAdmin && p.active !== false);
+    if (!others.length) {
+      throw new ServiceError('conflict', 'Não é possível remover ou desativar o último administrador geral ativo.');
+    }
+  }
 
   function assertCanActOn(access: AccessContext, actorP: Person, target: Membership, action: 'edit' | 'delete') {
     if (!canManageTeam(access, action)) {
@@ -466,7 +469,25 @@ export function createMockServices(options: MockBackendOptions = {}): Services {
     },
   };
 
-  const demo: Services['demo'] = {
+  const demo: NonNullable<Services['demo']> = {
+    async listProfiles() {
+      await begin();
+      const profiles: DemoProfile[] = data.persons.map((person) => {
+        const links = data.memberships.filter((m) => m.personId === person.id && m.active);
+        let kind: DemoProfile['kind'] = 'sem_acesso';
+        if (person.isGeneralAdmin) kind = 'admin';
+        else if (links.some((l) => l.role === 'responsavel')) kind = 'responsavel';
+        else if (links.length) kind = 'funcionario';
+        const summary = person.isGeneralAdmin
+          ? 'Administrador geral · todas as lojas'
+          : links.length
+            ? links.map((l) => `${ROLE_LABEL[l.role]} · ${storeName(l.storeId)}`).join(' | ')
+            : 'Sem vínculos ativos';
+        return { person, kind, summary, hint: PROFILE_HINTS[person.id] ?? '', activeLinks: links.length };
+      });
+      return clone(profiles);
+    },
+
     async resetData() {
       await wait();
       data = createSeed(now());

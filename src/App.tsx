@@ -8,7 +8,11 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState, ErrorState } from '@/components/ui/StateViews';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useAuth } from '@/context/AuthContext';
 import { useSession } from '@/context/SessionContext';
+import { services } from '@/services';
+import LoginPage from '@/pages/LoginPage';
+import SetPasswordPage from '@/pages/SetPasswordPage';
 import ActivityPage from '@/pages/ActivityPage';
 import CalendarPage from '@/pages/CalendarPage';
 import DemoEntryPage from '@/pages/DemoEntryPage';
@@ -20,20 +24,28 @@ import type { ReactNode } from 'react';
 
 export default function App() {
   const { status, error, retry, leaveDemo, stores, person, access } = useSession();
+  const auth = useAuth();
+  const live = !!services.auth; // backend real: entrada por e-mail e senha; sem seletor de perfis
 
-  if (status === 'sem_perfil') return <DemoEntryPage />;
-
-  if (status === 'carregando' || (status === 'pronta' && !person)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6" role="status" aria-label="Carregando">
-        <div className="w-full max-w-sm space-y-3">
-          <Skeleton className="h-6 w-1/2" />
-          <Skeleton className="h-24 w-full" />
-          <span className="sr-only">Carregando sessão de demonstração…</span>
-        </div>
+  const loading = (
+    <div className="flex min-h-screen items-center justify-center p-6" role="status" aria-label="Carregando">
+      <div className="w-full max-w-sm space-y-3">
+        <Skeleton className="h-6 w-1/2" />
+        <Skeleton className="h-24 w-full" />
+        <span className="sr-only">Carregando…</span>
       </div>
-    );
+    </div>
+  );
+
+  if (live) {
+    if (auth.status === 'loading') return loading;
+    if (auth.status === 'signed_out') return <LoginPage />;
+    if (auth.status === 'needs_password') return <SetPasswordPage />;
   }
+
+  if (status === 'sem_perfil') return live ? loading : <DemoEntryPage />;
+
+  if (status === 'carregando' || (status === 'pronta' && !person)) return loading;
 
   if (status === 'erro') {
     return (
@@ -42,7 +54,7 @@ export default function App() {
           <ErrorState message={error ?? 'Falha ao iniciar a demonstração.'} onRetry={retry} />
           <div className="border-t border-line p-3 text-center">
             <Button variant="ghost" onClick={leaveDemo}>
-              Escolher outro perfil
+              {live ? 'Sair' : 'Escolher outro perfil'}
             </Button>
           </div>
         </Card>
@@ -58,10 +70,10 @@ export default function App() {
           <EmptyState
             icon={ShieldOff}
             title="Sem acesso a nenhuma loja"
-            action={<Button variant="primary" onClick={leaveDemo}>Escolher outro perfil</Button>}
+            action={<Button variant="primary" onClick={leaveDemo}>{live ? 'Sair' : 'Escolher outro perfil'}</Button>}
           >
-            Todos os vínculos de {person?.name} estão desativados. A conta continua existindo e o histórico foi preservado,
-            mas é preciso que um responsável reative um vínculo para acessar uma loja.
+            {live ? 'Você' : person?.name} não tem nenhum vínculo ativo com uma loja. A conta continua existindo e o histórico foi
+            preservado, mas é preciso que um responsável reative um vínculo (ou envie um convite) para acessar uma loja.
           </EmptyState>
         </Card>
       </div>

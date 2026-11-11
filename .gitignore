@@ -7,3 +7,9 @@ dist/
 .DS_Store
 *.tsbuildinfo
 coverage/
+
+# Artefatos locais da CLI do Supabase e segredos de funções
+supabase/.temp/
+supabase/.branches/
+supabase/functions/.env
+supabase/functions/*/.env

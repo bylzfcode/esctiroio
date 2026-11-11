@@ -26,6 +26,8 @@ export interface Person {
   /** Único atributo de nível de conta que dá acesso global. Nunca editável pela interface. */
   isGeneralAdmin: boolean;
   createdAt: string;
+  /** Conta habilitada. Ausente = habilitada. Conta desativada perde o acesso a todas as lojas. */
+  active?: boolean;
 }
 
 /** Vínculo de uma pessoa com uma loja: perfil, cargo e permissões valem só para esta loja. */
@@ -45,6 +47,11 @@ export type Scope = { kind: 'consolidated' } | { kind: 'store'; storeId: string 
 
 export type ActivityType =
   | 'conta_criada'
+  | 'conta_editada'
+  | 'conta_desativada'
+  | 'conta_reativada'
+  | 'admin_concedido'
+  | 'admin_removido'
   | 'vinculo_criado'
   | 'vinculo_editado'
   | 'permissoes_alteradas'
@@ -55,8 +62,9 @@ export type ActivityType =
 export interface ActivityEntry {
   id: string;
   at: string;
-  storeId: string;
-  storeName: string;
+  /** null = evento global (ex.: papel de administrador geral). */
+  storeId: string | null;
+  storeName: string | null;
   actorId: string;
   actorName: string;
   type: ActivityType;

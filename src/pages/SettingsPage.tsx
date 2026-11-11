@@ -28,14 +28,15 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { person, access, activeStore, leaveDemo, refresh } = useSession();
   const toast = useToast();
-  const [failure, setFailure] = useState(services.demo.isSimulatingFailure());
+  const demo = services.demo; // existe somente no modo demonstração
+  const [failure, setFailure] = useState(demo?.isSimulatingFailure() ?? false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   const reset = async () => {
     setResetting(true);
     try {
-      await services.demo.resetData();
+      await demo?.resetData();
       setConfirmReset(false);
       toast.success('Dados de demonstração restaurados ao estado inicial.');
       await refresh();
@@ -53,7 +54,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Configurações" description="Preferências de aparência e ferramentas da demonstração." />
+      <PageHeader title="Configurações" description={demo ? 'Preferências de aparência e ferramentas da demonstração.' : 'Preferências de aparência e da sua sessão.'} />
       <div className="space-y-6">
         <Card>
           <CardHeader title="Aparência" />
@@ -79,7 +80,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Contexto atual" description="Quem você é e onde está, nesta demonstração." />
+          <CardHeader title="Contexto atual" description={demo ? 'Quem você é e onde está, nesta demonstração.' : 'Sua conta e a loja em que você está.'} />
           <div className="divide-y divide-line">
             <Row label="Pessoa">
               <span className="text-sm text-mute">{person?.name}</span>
@@ -90,12 +91,19 @@ export default function SettingsPage() {
             <Row label="Loja ativa">
               <span className="text-sm text-mute">{activeStore ? `${activeStore.name} (código ${activeStore.code})` : 'Visão consolidada'}</span>
             </Row>
-            <Row label="Trocar perfil" description="Volta à tela de escolha de perfil fictício. Não encerra nenhuma sessão real.">
-              <Button onClick={leaveDemo}>Escolher outro perfil</Button>
-            </Row>
+            {demo ? (
+              <Row label="Trocar perfil" description="Volta à tela de escolha de perfil fictício. Não encerra nenhuma sessão real.">
+                <Button onClick={leaveDemo}>Escolher outro perfil</Button>
+              </Row>
+            ) : (
+              <Row label="Encerrar sessão" description="Sai da sua conta neste navegador.">
+                <Button onClick={leaveDemo}>Sair</Button>
+              </Row>
+            )}
           </div>
         </Card>
 
+        {demo && (
         <Card>
           <CardHeader title="Ferramentas da demonstração" description="Existem apenas nesta etapa e não fazem parte do sistema final." />
           <div className="divide-y divide-line">
@@ -107,7 +115,7 @@ export default function SettingsPage() {
                 label="Simular falha de carregamento"
                 checked={failure}
                 onChange={(v) => {
-                  services.demo.setSimulateFailure(v);
+                  demo?.setSimulateFailure(v);
                   setFailure(v);
                   toast.info(v ? 'Falhas simuladas ativadas. Abra outra página para ver o erro.' : 'Falhas simuladas desativadas.');
                 }}
@@ -120,6 +128,7 @@ export default function SettingsPage() {
             </Row>
           </div>
         </Card>
+        )}
       </div>
 
       <ConfirmDialog
